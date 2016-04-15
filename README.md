@@ -1,4 +1,4 @@
-# teleop_ardrone
+# ardrone_tf_controller
 Position controller the AR Drone detecting an ARMarker
 
 #Launch
