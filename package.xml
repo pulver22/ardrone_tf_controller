@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<package>
+  <name>ardrone_tf_controller</name>
+  <version>0.1.0</version>
+  <description>Position controller the AR Drone detecting an ARMarker</description>
+
+  <maintainer email="namniart@gmail.com">Riccardo Polvara - ARdrone teleop</maintainer>
+
+  <license>BSD</license>
+
+  <author>Riccardo Polvara</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  
+  <build_depend>message_generation</build_depend>
+  <build_depend>roscpp</build_depend>
+  <build_depend>tf2</build_depend>
+  <build_depend>tf2_ros</build_depend>
+  <build_depend>ar_pose</build_depend>
+  <build_depend>geometry_msg</build_depend>
+  
+  <run_depend>roscpp</run_depend>
+  <run_depend>tf2</run_depend>
+  <run_depend>tf2_ros</run_depend>
+  <run_depend>ar_pose</run_depend>
+  <run_depend>geometry_msg</run_depend>
+
+
+
+</package>
