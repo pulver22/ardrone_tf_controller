@@ -5,11 +5,12 @@ find_package(catkin REQUIRED COMPONENTS
 	tf2
 	tf2_ros
 	roscpp
+	cv_bridge
 	)
 	
 	
 catkin_package(
-	CATKIN_DEPENDS tf2 tf2_ros roscpp)
+	CATKIN_DEPENDS tf2 tf2_ros roscpp cv_bridge)
 
 
 include_directories(
