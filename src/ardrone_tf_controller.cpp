@@ -94,10 +94,10 @@ int main ( int argc, char **argv )
                         linear_integral_z = 0.0;
                         rotational_integral_z = 0.0;
                 }
-                linear_integral_x += linear_integral_x * dt;
-                linear_integral_y += linear_integral_y * dt;
-                linear_integral_z += linear_integral_z * dt;
-                rotational_integral_z += rotational_integral_z * dt;
+                linear_integral_x += linear_error_x * dt;
+                linear_integral_y += linear_error_y * dt;
+                linear_integral_z += linear_error_z * dt;
+                rotational_integral_z += rotational_error_z * dt;
 
                 // Derivative terms
                 static double linear_previous_error_x = 0.0, linear_previous_error_y = 0.0, linear_previous_error_z = 0.0, rotational_previous_error_z = 0.0;
@@ -119,16 +119,20 @@ int main ( int argc, char **argv )
 
                 cout << "error_x : " << linear_error_x <<", error_y : " << linear_error_y << ", error_z : " << linear_error_z << ", rotational_error : " << rotational_error_z << endl;
                 if ( linear_error_x > 0.6 || linear_error_y > 0.1 || linear_error_y < -0.1 || rotational_error_z > 0.1 || rotational_error_z < - 0.1 || linear_error_z < -0.2 ) {
-                        kp = ki = kd = 0.13;
+                        kp = atof(argv[1]);
+			ki = atof(argv[2]);
+			kd = atof(argv[3]);
 
                 }
-
+		
+		
                 vel_msg.linear.x = kp * linear_error_x + ki * linear_integral_x + kd * linear_derivative_x;
                 vel_msg.linear.y = kp * linear_error_y + ki * linear_integral_y + kd * linear_derivative_y;
                 vel_msg.linear.z = - ( kp * linear_error_z + ki * linear_integral_z + kd * linear_derivative_z );
                 vel_msg.angular.z = - ( kp * rotational_error_z + ki * rotational_integral_z + kd * rotational_derivative_z );
-
-
+		
+		
+		cout << "kp = " << kp << " , ki = " << ki << " , kd = " << kd << endl;
                 cout << "(vx, vy, vz) : " << "(" << vel_msg.linear.x << ", " << vel_msg.linear.y <<", " << vel_msg.linear.z<< ")" << endl;
                 cout << "Rotational speed on z : " << vel_msg.angular.z << endl;
                 cout << "------------------------------------" << endl;
