@@ -19,6 +19,10 @@
   <build_depend>ar_pose</build_depend>
   <build_depend>geometry_msg</build_depend>
   <build_depend>cv_bridge</build_depend>
+  <build_depend>Toon</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>std_msgs</build_depend>
+  
   
   <run_depend>roscpp</run_depend>
   <run_depend>tf2</run_depend>
@@ -26,6 +30,10 @@
   <run_depend>ar_pose</run_depend>
   <run_depend>geometry_msg</run_depend>
   <run_depend>cv_bridge</run_depend>
+  <run_depend>Toon</run_depend>
+  <run_depend>uga_tum_ardrone</run_depend>
+  <run_depend>geometry_msgs</run_depend>
+  <run_depend>std_msgs</run_depend>
 
 
 

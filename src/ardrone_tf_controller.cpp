@@ -2,6 +2,7 @@
 #include <ros/node_handle.h>
 #include <cv_bridge/cv_bridge.h>
 #include <geometry_msgs/Pose.h>
+#include <geometry_msgs/Vector3.h>
 #include <geometry_msgs/Twist.h>
 #include <ar_pose/ARMarker.h>
 #include <tf2/transform_datatypes.h>
@@ -41,10 +42,11 @@ int main ( int argc, char **argv )
         tf2_ros::Buffer tfBuffer;
         tf2_ros::TransformListener tfListener ( tfBuffer );
         ros::Rate rate ( 2.0 );
+	ros::Publisher errors_pub = nh.advertise<geometry_msgs::Vector3>("/position_errors",10);
 
         while ( nh.ok() ) {
                 geometry_msgs::TransformStamped transformStamped;
-
+		geometry_msgs::Vector3 errors_msg;
                 try {
                         transformStamped = tfBuffer.lookupTransform ( "ar_marker","ardrone_base_frontcam",ros::Time ( 0 ) );
                 } catch ( tf2::TransformException &ex ) {
@@ -70,9 +72,17 @@ int main ( int argc, char **argv )
                 geometry_msgs::Twist vel_msg;
 
                 // PID gains
-                double kp = 0.001;
-                double ki = 0.001;
-                double kd = 0.001;
+                double kp_roll_pitch = 0.001;
+                double ki_roll_pitch = 0.001;
+                double kd_roll_pitch = 0.001;
+
+                double kp_yaw = 0.001;
+                double ki_yaw = 0.001;
+                double kd_yaw = 0.001;
+
+                double kp_gaz = 0.001;
+                double ki_gaz = 0.001;
+                double kd_gaz = 0.001;
 
                 // Errors
                 double linear_error_x = linear_offset_Z;
@@ -118,28 +128,43 @@ int main ( int argc, char **argv )
                 rotational_previous_error_z = rotational_error_z;
 
                 cout << "error_x : " << linear_error_x <<", error_y : " << linear_error_y << ", error_z : " << linear_error_z << ", rotational_error : " << rotational_error_z << endl;
-                if ( linear_error_x > 0.6 || linear_error_y > 0.1 || linear_error_y < -0.1 || rotational_error_z > 0.1 || rotational_error_z < - 0.1 || linear_error_z < -0.2 ) {
-                        kp = atof(argv[1]);
-			ki = atof(argv[2]);
-			kd = atof(argv[3]);
-
+                if ( linear_error_x > 0.6 || ( linear_error_y > 0.05 || linear_error_y < -0.05 ) ) {
+                        kp_roll_pitch = 0.5; //  0.35
+                        ki_roll_pitch = 0;
+                        kd_roll_pitch = 0.32;  //0.35
                 }
+
+                if ( rotational_error_z > 0.1 || rotational_error_z < - 0.1 ) {
+                        kp_yaw = 0.02; //0.5 
+                        ki_yaw = 0.0; //0.0
+                        kd_yaw = 0.0; //0.1
+                }
+
+                if ( linear_error_z < -0.05 ||linear_error_z > 0.05 ) {
+                        kp_gaz = 0.6; //0.5
+                        ki_gaz = 0.01; //0.1
+                        kd_gaz = 0.2; //0.3
+                }
+
+                vel_msg.linear.x = kp_roll_pitch * linear_error_x + ki_roll_pitch * linear_integral_x + kd_roll_pitch * linear_derivative_x;
+                vel_msg.linear.y = kp_roll_pitch * linear_error_y + ki_roll_pitch * linear_integral_y + kd_roll_pitch * linear_derivative_y;
+                vel_msg.linear.z = - ( kp_gaz * linear_error_z + ki_gaz * linear_integral_z + kd_gaz * linear_derivative_z );
+
+                vel_msg.angular.z = - ( kp_yaw * rotational_error_z + ki_yaw * rotational_integral_z + kd_yaw * rotational_derivative_z );
+
+		errors_msg.x = linear_error_x;
+		errors_msg.y = linear_error_y;
+		errors_msg.z = linear_error_z;
 		
 		
-                vel_msg.linear.x = kp * linear_error_x + ki * linear_integral_x + kd * linear_derivative_x;
-                vel_msg.linear.y = kp * linear_error_y + ki * linear_integral_y + kd * linear_derivative_y;
-                vel_msg.linear.z = - ( kp * linear_error_z + ki * linear_integral_z + kd * linear_derivative_z );
-                vel_msg.angular.z = - ( kp * rotational_error_z + ki * rotational_integral_z + kd * rotational_derivative_z );
-		
-		
-		cout << "kp = " << kp << " , ki = " << ki << " , kd = " << kd << endl;
+                //cout << "kp = " << kp << " , ki = " << ki << " , kd = " << kd << endl;
                 cout << "(vx, vy, vz) : " << "(" << vel_msg.linear.x << ", " << vel_msg.linear.y <<", " << vel_msg.linear.z<< ")" << endl;
                 cout << "Rotational speed on z : " << vel_msg.angular.z << endl;
                 cout << "------------------------------------" << endl;
 
 
                 vel_pub.publish ( vel_msg );
-
+		errors_pub.publish<>( errors_msg );
 
                 vel_msg.linear.x = vel_msg.linear.y = 0;
                 vel_msg.angular.z = 0.0;
