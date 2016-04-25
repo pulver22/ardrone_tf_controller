@@ -9,6 +9,7 @@
 #include <ar_pose/ARMarker.h>
 #include <tf2/transform_datatypes.h>
 #include <tf2_ros/transform_listener.h>
+#include <boost/lexical_cast.hpp>
 
 
 unsigned int ros_header_timestamp_base = 0;
@@ -22,12 +23,12 @@ int main ( int argc, char **argv )
         ROS_INFO ( "TF subscriber correctly running..." );
         ros::NodeHandle nh;
         //ros::Subscriber pose_sub=nh.subscribe<> ( "ar_pose_marker",1000,printPose );
-        ros::Publisher vel_pub =nh.advertise<geometry_msgs::Twist> ( "/cmd_vel", 10 );
+        //ros::Publisher vel_pub =nh.advertise<geometry_msgs::Twist> ( "/cmd_vel", 10 );
         tf2_ros::Buffer tfBuffer;
         tf2_ros::TransformListener tfListener ( tfBuffer );
-        ros::Rate rate ( 2.0 );
-        ros::Publisher errors_pub = nh.advertise<geometry_msgs::Vector3> ( "/position_errors",10 );
-        ros::Publisher cmd_pub = nh.advertise<std_msgs::String> ( "/uga_tum_ardrone",10 );
+        ros::Rate rate ( 1.0 );
+        //ros::Publisher errors_pub = nh.advertise<geometry_msgs::Vector3> ( "/position_errors",10 );
+        ros::Publisher cmd_pub = nh.advertise<std_msgs::String> ( "/uga_tum_ardrone/com",10 );
         //DroneController controller;
         //DronePosition target;
         int count = 1;
@@ -55,20 +56,53 @@ int main ( int argc, char **argv )
                 linear_offset_Z = transformStamped.transform.translation.z;
                 rotational_offset_Z = transformStamped.transform.rotation.z;
 
-                //string tmp_target = "c goto[" + linear_offset_X + "][" + linear_offset_Y + "][" + linear_offset_Z + "][" + rotational_offset_Z + "]";
-                std_msgs::String command;
+
+                std_msgs::String clear, autoinit,takeoff,move,land, reference, maxControl, initialReachDist, stayWithinDist, stayTime;
+                
+		
+                
+		clear.data = "c clearCommands";
+
+                autoinit.data = "c autoInit 500 800";
+                reference.data = "setReference $POSE$";
+                maxControl.data = "setMaxControl 1";
+                initialReachDist.data = "setInitialReachDist 0.2";
+                stayWithinDist.data = "setStayWithinDist 0.5";
+                stayTime.data = "setStayTime 2";
+
+                takeoff.data = "c takeoff";
+		
+		/* TODO
+		 * Fix axis correspondences: /uga_tum_ardrone/com apparently work with some weird reference system different from base_link
+		 */
+                move.data = "c goto " + boost::lexical_cast<std::string>(linear_offset_X) + " " + boost::lexical_cast<std::string>(linear_offset_Y) + " " + 
+			boost::lexical_cast<std::string>(linear_offset_Z) + " " + boost::lexical_cast<std::string>(rotational_offset_Z) ;
+                land.data = "c land";
+
                 if ( count ==  1 ) {
-                        command.data = "c clearCommands";
-                        //target.data = tmp_target;
-                        cmd_pub.publish<> ( command );
-                        cout << "Cmd 1" << endl;
-			count ++;
+
+                        cmd_pub.publish<> ( clear );
+
+                        cmd_pub.publish<> ( autoinit );
+                        cmd_pub.publish<> ( reference );
+                        cmd_pub.publish<> ( maxControl );
+                        cmd_pub.publish<> ( initialReachDist );
+                        cmd_pub.publish<> ( stayWithinDist );
+                        cmd_pub.publish<> ( stayTime );
+                        cmd_pub.publish<> ( takeoff );	// mandatory for taking off (despite in the gui the drone takes off also using only the autoInit)
+                        cmd_pub.publish<> ( move );
+                        cmd_pub.publish<> ( land );
+                        
+                        count ++;
+			//cout << linear_offset_X << " " << linear_offset_Y << " " << linear_offset_Z << " " << rotational_offset_Z << endl;
+                        //cout << move.data << endl;
                 }
-            
-                command.data = "c takeoff";
-                cmd_pub.publish<> ( command );
-                cout << "Cmd 2" << endl;
-                cout << "------------" << endl;
+
+                if ( count == 2 ) {
+                        ROS_INFO ( "All commands are already sent!" );
+                        count ++;
+                }
+                
 
 
 
