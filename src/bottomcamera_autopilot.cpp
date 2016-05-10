@@ -12,6 +12,7 @@
 //#include "../catkin_ws2/devel/include/ar_pose/ARMarkers.h"
 #include <tf2/transform_datatypes.h>
 #include <tf2_ros/transform_listener.h>
+#include <tf/LinearMath/Matrix3x3.h>
 #include <boost/lexical_cast.hpp>
 //#include <devel/include/ar_pose/ARMarker.h>
 
@@ -46,15 +47,21 @@ int main ( int argc, char **argv )
 
         // Save the translation and rotational offsets on three axis
         float linear_offset_X, linear_offset_Y, linear_offset_Z;
+        linear_offset_X = linear_offset_Y = linear_offset_Z = 0;
         float rotational_offset_Z;
-        linear_offset_X = linear_offset_Y = linear_offset_Z = rotational_offset_Z = 0;
+
+        tfScalar  roll, pitch, yaw;
+
 
         float target_X, target_Y,target_Z, target_yaw;
-        target_X = 0.1;
-        target_Y = 0.1;
-        target_Z = 0.3;
-        target_yaw = 5.0;
+        float epsilon;
+        target_X = 0.1;		// espressed in meters
+        target_Y = 0.1;		// espressed in meters
+        target_Z = 0.4;		// espressed in meters
+        target_yaw = 5.0;	//espressed in degrees
+        epsilon = 0.09;		// error variable on rotation expressed in radiant (~ 5 degrees)
 
+        bool was_reverse = false;
 
         while ( nh.ok() ) {
 
@@ -70,32 +77,53 @@ int main ( int argc, char **argv )
                 }
 
 
-                /* TODO
-                 * Fix yaw: if I take the abs(yaw) the drone rotate always in one direction. Otherwise it has a weird oscallating movements, it rotates a bit towards 
-		 * its right, then left, the right and so on...
-                 */
+                tf::Quaternion q ( transformStamped.transform.rotation.x, transformStamped.transform.rotation.y, transformStamped.transform.rotation.z, transformStamped.transform.rotation.w );
+                tf::Matrix3x3 m ( q );
+                m.getRPY ( roll, pitch, yaw );
+
+
+
+                // Print roll (X), pitch (Y) and yaw (Z)
+                //cout << "X : " << roll << " Y : " << pitch << " Z : " << yaw << endl;
+
+                cout << "TF : " << transformStamped.transform.translation.x << " " << transformStamped.transform.translation.y << " " << transformStamped.transform.translation.z << endl;
+                cout << "yaw_rad: " << yaw << endl;
+
+                float yaw_deg = ( float ) yaw * 180 / PI;
+                cout << "yaw_deg : " << yaw_deg << endl;
+
+		/* Consider the drone looking ahead only if its orientation is between [-45,+45] degrees
+		 */
 		
-                cout << "X : " << transformStamped.transform.rotation.x << " Y : " <<transformStamped.transform.rotation.y << " Z : " << transformStamped.transform.rotation.z << endl;
+                if ( ( yaw > - 0.78 ) && ( yaw < 0.78 ) ) {
+                        cout << "--- if ---" << endl;
 
-                // Adjust distance on the global X axis - z for marker and camera
-                // Adjust distance on the global y axis - x for marker and camera
-                // Adjust distance on the global z axis - y for marker and camera
-
-                if ( transformStamped.transform.translation.y > 0 ) {
-                        linear_offset_X = - transformStamped.transform.translation.x;
-                        linear_offset_Y = - transformStamped.transform.translation.y;
+                        /* Multiplyer changes coordinates frame if the drone was previously revers wrt to the marker
+                         */
+                        int multiplyer = 1;
+                        if ( was_reverse == true ) {
+                                multiplyer = -1;
+                        }
+                        linear_offset_X = - multiplyer * transformStamped.transform.translation.x;
+                        linear_offset_Y = - multiplyer * transformStamped.transform.translation.y;
                         linear_offset_Z = - abs ( transformStamped.transform.translation.z );
-                        float tmp_rotation =  transformStamped.transform.rotation.y;
-                        rotational_offset_Z = ( tmp_rotation * 180 / PI );
+                        rotational_offset_Z = ( ( float ) yaw * 180 / PI );
                 } else {
+
+                        /* TODO : implement a boolean variable was_reverse that is set to true when code enter in else branch.
+                         * Then, one in if, if was_boolean is set to true change the sign of all the variable.
+                         *
+                         * I don't know why this is required but seems that after rotation signs are completely fuc*d up!
+                         *
+                         */
+                        cout << "--- else ---" << endl;
                         linear_offset_X = - transformStamped.transform.translation.x;
                         linear_offset_Y = - transformStamped.transform.translation.y;
                         linear_offset_Z = - abs ( transformStamped.transform.translation.z );
-                        float tmp_rotation = transformStamped.transform.rotation.y;
-                        rotational_offset_Z = ( tmp_rotation * 180 / PI );
+                        rotational_offset_Z = ( ( float ) yaw * 180 / PI );
+                        was_reverse = true;
                 }
 
-                //cout << "TF : " << transformStamped.transform.translation.x << " " << transformStamped.transform.translation.y << " " << transformStamped.transform.translation.z << " with a yaw of " << transformStamped.transform.rotation.z << endl;
                 std_msgs::String clear, autoinit,takeoff,goTo,land, moveBy, reference, maxControl, initialReachDist, stayWithinDist, stayTime;
 
                 if ( abs ( linear_offset_X ) < target_X ) {
@@ -131,7 +159,16 @@ int main ( int argc, char **argv )
 
                 int currentTimeInSec = ( int ) ros::Time::now().sec;
 
-                // if ( abs ( linear_offset_X ) > target_X || abs ( linear_offset_Y ) > target_Y || abs ( linear_offset_Z ) > target_Z || abs ( rotational_offset_Z ) > target_yaw ) {
+                if ( moveBy.data.compare ( "c moveByRel 0 0 0 0" ) == 0 ) {
+                        ROS_INFO ( "Destination reached" );
+                        cmd_pub.publish<> ( land );
+                        ros::shutdown();
+                }
+
+
+                /* If the time stamp of the last message is equal to the current time, it means the marker has been correctly detected,
+                 * otherwise it has been lost
+                 */
                 if ( currentTimeInSec == last_msg ) {
                         cmd_pub.publish<> ( clear );
                         cmd_pub.publish<> ( autoinit );
@@ -140,7 +177,7 @@ int main ( int argc, char **argv )
                         cmd_pub.publish<> ( initialReachDist );
                         cmd_pub.publish<> ( stayWithinDist );
                         cmd_pub.publish<> ( stayTime );
-                        //cmd_pub.publish<> ( takeoff );	// mandatory for taking off (despite in the gui the drone takes off also using only the autoInit)
+                        //cmd_pub.publish<> ( takeoff );
                         cmd_pub.publish<> ( moveBy );
 
                         //cout << "alive" << endl;
@@ -156,26 +193,14 @@ int main ( int argc, char **argv )
                         cmd_pub.publish<> ( initialReachDist );
                         cmd_pub.publish<> ( stayWithinDist );
                         cmd_pub.publish<> ( stayTime );
-                        //cmd_pub.publish<> ( takeoff );	// mandatory for taking off (despite in the gui the drone takes off also using only the autoInit)
-                        moveBy.data = "c moveByRel 0 0 1 0";
+                        //cmd_pub.publish<> ( takeoff );
+                        moveBy.data = "c moveByRel 0 0 0.2 0";
                         cmd_pub.publish<> ( moveBy );
                         cout << moveBy.data << endl;
                         cout <<  endl;
                         //ros::Duration ( 1.0 ).sleep();
                 }
-
-
-                if ( moveBy.data.compare ( "c moveByRel 0 0 0 0" ) == 0 ) {
-                        cout << linear_offset_X << " " << linear_offset_Y << " " << linear_offset_Z << " " << rotational_offset_Z << endl;
-                        ROS_INFO ( "Destination reached" );
-                        cmd_pub.publish<> ( land );
-                        ros::shutdown();
-                }
-
-
-
-
-
+                linear_offset_X = linear_offset_Y = linear_offset_Z = 0;
                 rate.sleep();
                 ros::spinOnce();
         }
