@@ -5,14 +5,18 @@ find_package(catkin REQUIRED COMPONENTS
 	tf2
 	tf2_ros
 	roscpp
+	rospy	
 	cv_bridge
 	geometry_msgs
 	std_msgs
 	)
 	
 	
+
+
+
 catkin_package(
-	CATKIN_DEPENDS tf2 tf2_ros roscpp cv_bridge Toon geometry_msgs std_msgs)
+	CATKIN_DEPENDS tf2 tf2_ros roscpp rospy cv_bridge Toon geometry_msgs std_msgs )
 
 
 include_directories(
@@ -20,24 +24,23 @@ include_directories(
   
 )
 
+
+
 add_executable(ardrone_tf_controller src/ardrone_tf_controller.cpp)
 add_executable(frontcamera_autopilot src/frontcamera_autopilot.cpp)
 add_executable(bottomcamera_autopilot src/bottomcamera_autopilot.cpp)
 
 
 
-
 target_link_libraries(frontcamera_autopilot 
    ${catkin_LIBRARIES}
- )
+)
 
  
 target_link_libraries(ardrone_tf_controller
 ${catkin_LIBRARIES}
-
 )
 
 target_link_libraries(bottomcamera_autopilot 
    ${catkin_LIBRARIES}
-  
- )
+)

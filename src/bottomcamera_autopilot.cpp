@@ -43,8 +43,6 @@ int main ( int argc, char **argv )
         ros::Publisher cmd_pub = nh.advertise<std_msgs::String> ( "/uga_tum_ardrone/com",100 );
         ros::Subscriber marker_sub = nh.subscribe ( "/ar_pose_marker",1, marker_callback );
 
-
-
         // Save the translation and rotational offsets on three axis
         float linear_offset_X, linear_offset_Y, linear_offset_Z;
         linear_offset_X = linear_offset_Y = linear_offset_Z = 0;
@@ -55,12 +53,15 @@ int main ( int argc, char **argv )
 
         float target_X, target_Y,target_Z, target_yaw;
         float epsilon;
-        target_X = 0.1;		// espressed in meters
-        target_Y = 0.1;		// espressed in meters
-        target_Z = 0.4;		// espressed in meters
-        target_yaw = 5.0;	//espressed in degrees
-        epsilon = 0.09;		// error variable on rotation expressed in radiant (~ 5 degrees)
-
+	
+	nh.getParam("/ardrone_tf_controller/target_X",target_X);	// expressed in meters (def: 0.1)
+	nh.getParam("/ardrone_tf_controller/target_Y",target_Y);	// expressed in meters (def: 0.1)
+	nh.getParam("/ardrone_tf_controller/target_Z",target_Z);	// expressed in meters (def: 0.4)
+	nh.getParam("/ardrone_tf_controller/target_yaw",target_yaw);	// expressed in degress (def: 5.0)
+	nh.getParam("/ardrone_tf_controller/epsilon",epsilon);		// error variable on rotation expressed in radiants (def: 0.78)
+	
+	cout << target_X << " " << target_Y << " " << target_Z << " " << target_yaw <<" " << epsilon << endl;
+	
         bool was_reverse = false;
 
         while ( nh.ok() ) {
@@ -69,35 +70,31 @@ int main ( int argc, char **argv )
                 geometry_msgs::Vector3 errors_msg;
                 try {
                         transformStamped = tfBuffer.lookupTransform ( "ar_marker","ardrone_base_bottomcam",ros::Time ( 0 ) );
-                        //transformStamped = tfBuffer.lookupTransform( "ar_marker", "base_link", ros::Time(0));
                 } catch ( tf2::TransformException &ex ) {
                         ROS_WARN ( "%s",ex.what() );
                         ros::Duration ( 1.0 ).sleep();
                         continue;
                 }
 
-
+			
+		/* Get rotation expressed in quaternion, transform it in a rotation matrix and then retrieve roll pitch and yaw
+		 */
                 tf::Quaternion q ( transformStamped.transform.rotation.x, transformStamped.transform.rotation.y, transformStamped.transform.rotation.z, transformStamped.transform.rotation.w );
                 tf::Matrix3x3 m ( q );
                 m.getRPY ( roll, pitch, yaw );
-
-
-
-                // Print roll (X), pitch (Y) and yaw (Z)
-                //cout << "X : " << roll << " Y : " << pitch << " Z : " << yaw << endl;
-
+		
+		
+		/*
                 cout << "TF : " << transformStamped.transform.translation.x << " " << transformStamped.transform.translation.y << " " << transformStamped.transform.translation.z << endl;
                 cout << "yaw_rad: " << yaw << endl;
-
                 float yaw_deg = ( float ) yaw * 180 / PI;
                 cout << "yaw_deg : " << yaw_deg << endl;
-
+		*/
+		
+		
 		/* Consider the drone looking ahead only if its orientation is between [-45,+45] degrees
 		 */
-		
-                if ( ( yaw > - 0.78 ) && ( yaw < 0.78 ) ) {
-                        cout << "--- if ---" << endl;
-
+                if ( ( yaw > - epsilon ) && ( yaw < epsilon ) ) {
                         /* Multiplyer changes coordinates frame if the drone was previously revers wrt to the marker
                          */
                         int multiplyer = 1;
@@ -109,15 +106,7 @@ int main ( int argc, char **argv )
                         linear_offset_Z = - abs ( transformStamped.transform.translation.z );
                         rotational_offset_Z = ( ( float ) yaw * 180 / PI );
                 } else {
-
-                        /* TODO : implement a boolean variable was_reverse that is set to true when code enter in else branch.
-                         * Then, one in if, if was_boolean is set to true change the sign of all the variable.
-                         *
-                         * I don't know why this is required but seems that after rotation signs are completely fuc*d up!
-                         *
-                         */
-                        cout << "--- else ---" << endl;
-                        linear_offset_X = - transformStamped.transform.translation.x;
+			linear_offset_X = - transformStamped.transform.translation.x;
                         linear_offset_Y = - transformStamped.transform.translation.y;
                         linear_offset_Z = - abs ( transformStamped.transform.translation.z );
                         rotational_offset_Z = ( ( float ) yaw * 180 / PI );
