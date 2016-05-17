@@ -42,11 +42,13 @@ int main ( int argc, char **argv )
         ros::Rate rate ( 1.0 );
         ros::Publisher cmd_pub = nh.advertise<std_msgs::String> ( "/uga_tum_ardrone/com",100 );
         ros::Subscriber marker_sub = nh.subscribe ( "/ar_pose_marker",1, marker_callback );
-
+	ros::Publisher offset_pub = nh.advertise<geometry_msgs::Vector3>("/offset",100);
+	
         // Save the translation and rotational offsets on three axis
         float linear_offset_X, linear_offset_Y, linear_offset_Z;
         linear_offset_X = linear_offset_Y = linear_offset_Z = 0;
         float rotational_offset_Z;
+	geometry_msgs::Vector3 offset;
 
         tfScalar  roll, pitch, yaw;
 
@@ -59,15 +61,13 @@ int main ( int argc, char **argv )
 	nh.getParam("/ardrone_tf_controller/target_Z",target_Z);	// expressed in meters (def: 0.4)
 	nh.getParam("/ardrone_tf_controller/target_yaw",target_yaw);	// expressed in degress (def: 5.0)
 	nh.getParam("/ardrone_tf_controller/epsilon",epsilon);		// error variable on rotation expressed in radiants (def: 0.78)
-	
-	cout << target_X << " " << target_Y << " " << target_Z << " " << target_yaw <<" " << epsilon << endl;
-	
+		
         bool was_reverse = false;
 
         while ( nh.ok() ) {
 
                 geometry_msgs::TransformStamped transformStamped;
-                geometry_msgs::Vector3 errors_msg;
+
                 try {
                         transformStamped = tfBuffer.lookupTransform ( "ar_marker","ardrone_base_bottomcam",ros::Time ( 0 ) );
                 } catch ( tf2::TransformException &ex ) {
@@ -112,6 +112,11 @@ int main ( int argc, char **argv )
                         rotational_offset_Z = ( ( float ) yaw * 180 / PI );
                         was_reverse = true;
                 }
+                
+                offset.x = abs(linear_offset_X);
+		offset.y = abs(linear_offset_Y);
+		offset.z = abs(linear_offset_Z)	;
+		offset_pub.publish(offset);
 
                 std_msgs::String clear, autoinit,takeoff,goTo,land, moveBy, reference, maxControl, initialReachDist, stayWithinDist, stayTime;
 
@@ -174,7 +179,7 @@ int main ( int argc, char **argv )
                         cout <<  endl;
                         //ros::Duration ( 1.0 ).sleep();
                 } else {
-                        ROS_INFO ( "Marker is lost!" );
+                        ROS_WARN ( "Marker is lost!" );
                         cmd_pub.publish<> ( clear );
                         cmd_pub.publish<> ( autoinit );
                         cmd_pub.publish<> ( reference );

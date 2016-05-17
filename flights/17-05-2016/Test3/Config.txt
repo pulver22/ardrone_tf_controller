@@ -1,0 +1,4 @@
+k_direct = 50
+K_rp = 0.09
+max_yaw = 0.8
+aggressiveness = 3.0
