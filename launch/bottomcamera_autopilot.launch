@@ -1,8 +1,8 @@
 <launch>
 
     <node name="ardrone_tf_controller" pkg="ardrone_tf_controller" type="bottomcamera_autopilot" output="screen">
-	<param name="target_X" value="0.1" />
-	<param name="target_Y" value="0.1" />
+	<param name="target_X" value="0.05" />
+	<param name="target_Y" value="0.05" />
 	<param name="target_Z" value="0.4" />
 	<param name="target_yaw" value="5.0" />
 	<param name="epsilon" value="0.78" />	
