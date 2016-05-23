@@ -15,6 +15,8 @@
 #include <tf/LinearMath/Matrix3x3.h>
 #include <boost/lexical_cast.hpp>
 //#include <devel/include/ar_pose/ARMarker.h>
+#include "std_msgs/Float32.h"
+#include "../include/offset.h"
 
 
 
@@ -42,13 +44,13 @@ int main ( int argc, char **argv )
         ros::Rate rate ( 1.0 );
         ros::Publisher cmd_pub = nh.advertise<std_msgs::String> ( "/uga_tum_ardrone/com",100 );
         ros::Subscriber marker_sub = nh.subscribe ( "/ar_pose_marker",1, marker_callback );
-	ros::Publisher offset_pub = nh.advertise<geometry_msgs::Vector3>("/offset",100);
-	
+		ros::Publisher linear_offset_pub = nh.advertise<geometry_msgs::Vector3> ( "/linear_offset",100 );
+        ros::Publisher rotational_offset_pub = nh.advertise<std_msgs::Float32> ( "/rotation_offset",100 );		
+		geometry_msgs::Vector3 offset_msg;
+        std_msgs::Float32 yaw_msg;
+		
         // Save the translation and rotational offsets on three axis
-        float linear_offset_X, linear_offset_Y, linear_offset_Z;
-        linear_offset_X = linear_offset_Y = linear_offset_Z = 0;
-        float rotational_offset_Z;
-	geometry_msgs::Vector3 offset;
+        Offset offset;
 
         tfScalar  roll, pitch, yaw;
 
@@ -56,12 +58,12 @@ int main ( int argc, char **argv )
         float target_X, target_Y,target_Z, target_yaw;
         float epsilon;
 	
-	nh.getParam("/ardrone_tf_controller/target_X",target_X);	// expressed in meters (def: 0.1)
-	nh.getParam("/ardrone_tf_controller/target_Y",target_Y);	// expressed in meters (def: 0.1)
-	nh.getParam("/ardrone_tf_controller/target_Z",target_Z);	// expressed in meters (def: 0.4)
-	nh.getParam("/ardrone_tf_controller/target_yaw",target_yaw);	// expressed in degress (def: 5.0)
-	nh.getParam("/ardrone_tf_controller/epsilon",epsilon);		// error variable on rotation expressed in radiants (def: 0.78)
-		
+		nh.getParam("/ardrone_tf_controller/target_X",target_X);	// expressed in meters (def: 0.1)
+		nh.getParam("/ardrone_tf_controller/target_Y",target_Y);	// expressed in meters (def: 0.1)
+		nh.getParam("/ardrone_tf_controller/target_Z",target_Z);	// expressed in meters (def: 0.4)
+		nh.getParam("/ardrone_tf_controller/target_yaw",target_yaw);	// expressed in degress (def: 5.0)
+		nh.getParam("/ardrone_tf_controller/epsilon",epsilon);		// error variable on rotation expressed in radiants (def: 0.78)
+			
         bool was_reverse = false;
 
         while ( nh.ok() ) {
@@ -101,39 +103,44 @@ int main ( int argc, char **argv )
                         if ( was_reverse == true ) {
                                 multiplyer = -1;
                         }
-                        linear_offset_X = - multiplyer * transformStamped.transform.translation.x;
-                        linear_offset_Y = - multiplyer * transformStamped.transform.translation.y;
-                        linear_offset_Z = - abs ( transformStamped.transform.translation.z );
-                        rotational_offset_Z = ( ( float ) yaw * 180 / PI );
+                        offset.setRoll( - multiplyer * transformStamped.transform.translation.x);
+                        offset.setPitch( - multiplyer * transformStamped.transform.translation.y);
+                        offset.setGaz(- abs ( transformStamped.transform.translation.z ));
+                        offset.setYaw ( ( float ) yaw * 180 / PI );
                 } else {
-			linear_offset_X = - transformStamped.transform.translation.x;
-                        linear_offset_Y = - transformStamped.transform.translation.y;
-                        linear_offset_Z = - abs ( transformStamped.transform.translation.z );
-                        rotational_offset_Z = ( ( float ) yaw * 180 / PI );
+						offset.setRoll( - transformStamped.transform.translation.x);
+                        offset.setPitch(- transformStamped.transform.translation.y);
+                        offset.setGaz(- abs ( transformStamped.transform.translation.z ));
+                        offset.setYaw( ( ( float ) yaw * 180 / PI ));
                         was_reverse = true;
                 }
                 
-                offset.x = abs(linear_offset_X);
-		offset.y = abs(linear_offset_Y);
-		offset.z = abs(linear_offset_Z)	;
-		offset_pub.publish(offset);
+                 /* Plot the offsets calculated with TF
+                 */
+                offset_msg.x = ( offset.getRoll() );
+                offset_msg.y = ( offset.getPitch() );
+                offset_msg.z = ( offset.getGaz() )	;
+                linear_offset_pub.publish ( offset_msg );
+                yaw_msg.data = offset.getYaw();
+                rotational_offset_pub.publish<> ( yaw_msg );
+                // ------------------------------------
 
                 std_msgs::String clear, autoinit,takeoff,goTo,land, moveBy, reference, maxControl, initialReachDist, stayWithinDist, stayTime;
 
-                if ( abs ( linear_offset_X ) < target_X ) {
-                        linear_offset_X = 0;
+                if ( abs ( offset.getRoll() ) < target_X ) {
+                        offset.setRoll(0);
                 }
 
-                if ( abs ( linear_offset_Y ) < target_Y ) {
-                        linear_offset_Y = 0;
+                if ( abs ( offset.getPitch() ) < target_Y ) {
+                        offset.setPitch(0);
                 }
 
-                if ( abs ( linear_offset_Z ) < target_Z ) {
-                        linear_offset_Z = 0;
+                if ( abs ( offset.getGaz() ) < target_Z ) {
+                        offset.setGaz(0);
                 }
 
-                if ( abs ( rotational_offset_Z ) < target_yaw ) {
-                        rotational_offset_Z = 0;
+                if ( abs ( offset.getYaw() ) < target_yaw ) {
+                        offset.setYaw(0);
                 }
 
                 clear.data = "c clearCommands";
@@ -147,8 +154,8 @@ int main ( int argc, char **argv )
 
                 takeoff.data = "c takeoff";
 
-                moveBy.data = "c moveByRel " + boost::lexical_cast<std::string> ( linear_offset_X ) + " " + boost::lexical_cast<std::string> ( linear_offset_Y ) + " " +
-                              boost::lexical_cast<std::string> ( linear_offset_Z ) + " " + boost::lexical_cast<std::string> ( rotational_offset_Z ) ;
+                moveBy.data = "c moveByRel " + boost::lexical_cast<std::string> ( offset.getRoll() ) + " " + boost::lexical_cast<std::string> ( offset.getPitch() ) + " " +
+                              boost::lexical_cast<std::string> ( offset.getGaz() ) + " " + boost::lexical_cast<std::string> ( offset.getYaw() ) ;
                 land.data = "c land";
 
                 int currentTimeInSec = ( int ) ros::Time::now().sec;
@@ -194,7 +201,6 @@ int main ( int argc, char **argv )
                         cout <<  endl;
                         //ros::Duration ( 1.0 ).sleep();
                 }
-                linear_offset_X = linear_offset_Y = linear_offset_Z = 0;
                 rate.sleep();
                 ros::spinOnce();
         }
