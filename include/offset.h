@@ -6,6 +6,8 @@ class Offset{
 public:
 	
 	Offset();
+	Offset(double roll, double pitch, double gax, double yaw);
+	Offset(const Offset& other);
 	double getRoll();
 	double getPitch();
 	double getGaz();

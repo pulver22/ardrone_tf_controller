@@ -27,7 +27,10 @@ unsigned int ros_header_timestamp_base = 0;
 
 using namespace std;
 
-void marker_callback ( const ar_pose::ARMarker::ConstPtr msg )
+void updateOffset ( Offset* offset, double target_X, double target_Y, double target_Z, double target_yaw );
+int getCompensatoryFactor( Offset* current_offset, Offset* last_offset, int count );
+
+void markerCallback ( const ar_pose::ARMarker::ConstPtr msg )
 {
 
         ROS_INFO ( "Marker detected!" );
@@ -43,7 +46,7 @@ int main ( int argc, char **argv )
         tf2_ros::TransformListener tfListener ( tfBuffer );
         ros::Rate rate ( 1.0 );
         ros::Publisher cmd_pub = nh.advertise<std_msgs::String> ( "/uga_tum_ardrone/com",100 );
-        ros::Subscriber marker_sub = nh.subscribe ( "/ar_pose_marker",1, marker_callback );
+        ros::Subscriber marker_sub = nh.subscribe ( "/ar_pose_marker",1, markerCallback );
         ros::Publisher linear_offset_pub = nh.advertise<geometry_msgs::Vector3> ( "/linear_offset",100 );
         ros::Publisher rotational_offset_pub = nh.advertise<std_msgs::Float32> ( "/rotation_offset",100 );
         geometry_msgs::Vector3 offset_msg;
@@ -51,14 +54,14 @@ int main ( int argc, char **argv )
 
         // Save the translation and rotational offsets on three axis
         Offset current_offset;
-		current_offset.setRoll(0);
-		current_offset.setPitch(0);
-		current_offset.setGaz(0);
-		current_offset.setYaw(0);
+        current_offset.setRoll ( 0 );
+        current_offset.setPitch ( 0 );
+        current_offset.setGaz ( 0 );
+        current_offset.setYaw ( 0 );
         Offset last_view_offset;
-		last_view_offset.setOffset(current_offset);
+        last_view_offset.setOffset ( current_offset );
         int count = 0;
-		int K_compensatory;
+        int K_compensatory;
 
         tfScalar  roll, pitch, yaw;
 
@@ -124,21 +127,10 @@ int main ( int argc, char **argv )
 
                 std_msgs::String clear, autoinit,takeoff,goTo, moveBy ,land, reference, maxControl, initialReachDist, stayWithinDist, stayTime;
 
-                if ( abs ( current_offset.getRoll() ) < target_X ) {
-                        current_offset.setRoll ( 0 );
-                }
-
-                if ( abs ( current_offset.getPitch() ) < target_Y ) {
-                        current_offset.setPitch ( 0 );
-                }
-
-                if ( abs ( current_offset.getGaz() ) < target_Z ) {
-                        current_offset.setGaz ( 0 );
-                }
-
-                if ( abs ( current_offset.getYaw() ) < target_yaw ) {
-                        current_offset.setYaw ( 0 );
-                }
+                // Modify current_offset in proximity of the target
+				Offset* current_offset_ptr = &current_offset;
+				Offset* last_view_offset_ptr = &last_view_offset;
+                updateOffset ( current_offset_ptr,target_X,target_Y,target_Z,target_yaw ) ;
 
                 clear.data = "c clearCommands";
 
@@ -172,8 +164,8 @@ int main ( int argc, char **argv )
                  * otherwise it has been lost
                  */
 
-				K_compensatory = 1;
-				
+                K_compensatory = 1;
+
                 if ( last_msg == 0 ) {
                         // do nothing
                 } else {
@@ -181,7 +173,7 @@ int main ( int argc, char **argv )
                         if ( currentTimeInSec == last_msg ) {
                                 cmd_pub.publish<> ( clear );
                                 if ( count == 1 ) {
-									ROS_INFO("Initialization");
+                                        ROS_INFO ( "Initialization" );
                                         cmd_pub.publish<> ( autoinit );
                                         cmd_pub.publish<> ( reference );
                                         cmd_pub.publish<> ( maxControl );
@@ -189,34 +181,23 @@ int main ( int argc, char **argv )
                                         cmd_pub.publish<> ( stayWithinDist );
                                         cmd_pub.publish<> ( stayTime );
                                         //cmd_pub.publish<> ( takeoff );
-                                }
-                              
-                                cout << "Last X offset : " << last_view_offset.getRoll() << ", current X offset : " << current_offset.getRoll() << endl;
-								cout << "count : " << count << endl;
-                                if ( last_view_offset.getRoll() * current_offset.getRoll() <=0 && count != 1 ) {
-                                        
-                                        if ( current_offset.getRoll() > 0 ) {
-                                                ROS_WARN ( "Virtual X axis crossed #1" );
-                                                K_compensatory =  10;
-                                        } else {
-                                                ROS_WARN ( "Virtual X axis crossed #1" );
-                                                K_compensatory = -4;
-                                        }
+                                } else {
 
-                                } /*else if ( last_view_offset.getRoll() * current_offset.getRoll() > 0 && current_offset.getRoll() < 0 ) {
-                                        ROS_WARN ( "Virtual X axis crossed #2" );
-                                        K_compensatory = 4;
-                                }*/
-                                
-                                moveBy.data = "c moveByRel " + boost::lexical_cast<std::string> ( K_compensatory * current_offset.getRoll() ) + " " + boost::lexical_cast<std::string> ( current_offset.getPitch() ) + " " +
+                                        cout << "Last X offset : " << last_view_offset.getRoll() << ", current X offset : " << current_offset.getRoll() << endl;
+                                        cout << "count : " << count << endl;
+                                        K_compensatory = getCompensatoryFactor(current_offset_ptr, last_view_offset_ptr, count);
+
+                                        moveBy.data = "c moveByRel " + boost::lexical_cast<std::string> ( K_compensatory * current_offset.getRoll() ) + " " + boost::lexical_cast<std::string> ( current_offset.getPitch() ) + " " +
                                                       boost::lexical_cast<std::string> ( current_offset.getGaz() ) + " " + boost::lexical_cast<std::string> ( current_offset.getYaw() ) ;
 
-                                cmd_pub.publish<> ( moveBy );
-                                //cout << "alive" << endl;
-                                cout << moveBy.data << endl;
-                                last_view_offset.setOffset ( current_offset );
-                                cout <<  endl;
+                                        cmd_pub.publish<> ( moveBy );
+                                        //cout << "alive" << endl;
+                                        cout << moveBy.data << endl;
+										last_view_offset.setOffset ( current_offset );
+                                }
                                 
+                                cout <<  endl;
+
                         } else {
 
                                 /* TODO: this solution doesn't work always. Sometimes the marker is detected but the timestamp don't are equal: like one message has been lost
@@ -244,10 +225,51 @@ int main ( int argc, char **argv )
                         }
                 }
                 count++;
+				//delete current_offset_ptr;
+				//delete last_view_offset_ptr;
                 rate.sleep();
                 ros::spinOnce();
         }
 
         return 0;
 
+}
+
+void updateOffset ( Offset* offset, double target_X, double target_Y, double target_Z, double target_yaw )
+{
+
+        if ( abs ( offset->getRoll() ) < target_X ) {
+                offset->setRoll ( 0 );
+        }
+
+        if ( abs ( offset->getPitch() ) < target_Y ) {
+                offset->setPitch ( 0 );
+        }
+
+        if ( abs ( offset->getGaz() ) < target_Z ) {
+                offset->setGaz ( 0 );
+        }
+
+        if ( abs ( offset->getYaw() ) < target_yaw ) {
+                offset->setYaw ( 0 );
+        }
+ 
+}
+
+
+int getCompensatoryFactor ( Offset* current_offset, Offset* last_offset, int count )
+{
+        int tmpCompensatoryFactor = 1;
+        if ( last_offset->getRoll() * current_offset->getRoll() <=0 && count > 1 ) {
+
+                if ( current_offset->getRoll() > 0 ) {
+                        ROS_WARN ( "Virtual X axis crossed #1" );
+                        tmpCompensatoryFactor =  10;
+                } else if ( current_offset->getRoll() < 0 ) {
+                        ROS_WARN ( "Virtual X axis crossed #2" );
+                        tmpCompensatoryFactor = -10;
+				}
+
+        }
+        return tmpCompensatoryFactor;
 }

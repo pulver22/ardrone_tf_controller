@@ -1,8 +1,22 @@
 #include "../include/offset.h"
+#include <cstring>
+
 
 
 Offset::Offset()
 {
+}
+
+Offset::Offset ( double roll, double pitch, double gax, double yaw )
+{
+	this->roll = roll;
+	this->pitch = pitch;
+	this->gaz = gaz;
+	this->yaw = yaw;
+}
+
+Offset::Offset(const Offset& other){
+    //memcpy( &this, other, sizeof(other) );
 }
 
 double Offset::getRoll(){
