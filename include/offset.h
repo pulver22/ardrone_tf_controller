@@ -7,7 +7,7 @@ public:
 	
 	Offset();
 	Offset(double roll, double pitch, double gax, double yaw);
-	Offset(const Offset& other);
+	~Offset();
 	double getRoll();
 	double getPitch();
 	double getGaz();
