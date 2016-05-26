@@ -148,7 +148,7 @@ int main ( int argc, char **argv )
                                    boost::lexical_cast<std::string> ( current_offset.GetYaw() ) ;
 
 
-
+		// Marker has been reached
                 if ( move_by_rel.data.compare ( "c moveByRel 0 0 0 0" ) == 0 ) {
                         ROS_INFO ( "Destination reached" );
                         cmd_pub.publish<> ( move_by_rel );
@@ -157,10 +157,9 @@ int main ( int argc, char **argv )
                         //ros::shutdown();
                 } else {
 
-                        /* If the time stamp of the last message is equal to the current
-                        time, it means the marker has been correctly detected,
-                         * otherwise it has been lost
-                         */
+                        // If the time stamp of the last message is equal to the current
+                        // time, it means the marker has been correctly detected,otherwise it has been lost
+                        
 
                         k_roll = k_pitch = k_gaz = 1;
 
@@ -229,6 +228,7 @@ int main ( int argc, char **argv )
                                         cout <<  endl;
                                 }
                         }
+
                 }
                 count++;
                 rate.sleep();
