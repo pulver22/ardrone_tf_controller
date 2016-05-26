@@ -40,7 +40,7 @@ int main ( int argc, char **argv )
         //ros::Subscriber pose_sub=nh.subscribe<> ( "ar_pose_marker",1000,printPose );
         ros::Publisher vel_pub =nh.advertise<geometry_msgs::Twist> ( "/cmd_vel", 10 );
         tf2_ros::Buffer tfBuffer;
-        tf2_ros::TransformListener tfListener ( tfBuffer );
+        tf2_ros::TransformListener tf_listener ( tfBuffer );
         ros::Rate rate ( 2.0 );
 	ros::Publisher errors_pub = nh.advertise<geometry_msgs::Vector3>("/position_errors",10);
 

@@ -26,7 +26,7 @@ const double PI = 3.141593;
 
 using namespace std;
 
-void marker_callback ( const ar_pose::ARMarker::ConstPtr msg )
+void MarkerCallback ( const ar_pose::ARMarker::ConstPtr msg )
 {
 
         ROS_INFO ( "Marker detected!" );
@@ -39,11 +39,11 @@ int main ( int argc, char **argv )
         ros::init ( argc, argv,"pose_subscriber" );
         ROS_INFO ( "TF subscriber correctly running..." );
         ros::NodeHandle nh;
-        tf2_ros::Buffer tfBuffer;
-        tf2_ros::TransformListener tfListener ( tfBuffer );
+        tf2_ros::Buffer tf_buffer;
+        tf2_ros::TransformListener tf_listener ( tf_buffer );
         ros::Rate rate ( 1.0 );
         ros::Publisher cmd_pub = nh.advertise<std_msgs::String> ( "/uga_tum_ardrone/com",100 );
-        ros::Subscriber marker_sub = nh.subscribe ( "/ar_pose_marker",1, marker_callback );
+        ros::Subscriber marker_sub = nh.subscribe ( "/ar_pose_marker",1, MarkerCallback );
 		ros::Publisher linear_offset_pub = nh.advertise<geometry_msgs::Vector3> ( "/linear_offset",100 );
         ros::Publisher rotational_offset_pub = nh.advertise<std_msgs::Float32> ( "/rotation_offset",100 );		
 		geometry_msgs::Vector3 offset_msg;
@@ -55,12 +55,12 @@ int main ( int argc, char **argv )
         tfScalar  roll, pitch, yaw;
 
 
-        float target_X, target_Y,target_Z, target_yaw;
+        float target_x, target_y,target_z, target_yaw;
         float epsilon;
 	
-		nh.getParam("/ardrone_tf_controller/target_X",target_X);	// expressed in meters (def: 0.1)
-		nh.getParam("/ardrone_tf_controller/target_Y",target_Y);	// expressed in meters (def: 0.1)
-		nh.getParam("/ardrone_tf_controller/target_Z",target_Z);	// expressed in meters (def: 0.4)
+		nh.getParam("/ardrone_tf_controller/target_X",target_x);	// expressed in meters (def: 0.1)
+		nh.getParam("/ardrone_tf_controller/target_Y",target_y);	// expressed in meters (def: 0.1)
+		nh.getParam("/ardrone_tf_controller/target_Z",target_z);	// expressed in meters (def: 0.4)
 		nh.getParam("/ardrone_tf_controller/target_yaw",target_yaw);	// expressed in degress (def: 5.0)
 		nh.getParam("/ardrone_tf_controller/epsilon",epsilon);		// error variable on rotation expressed in radiants (def: 0.78)
 			
@@ -71,7 +71,7 @@ int main ( int argc, char **argv )
                 geometry_msgs::TransformStamped transformStamped;
 
                 try {
-                        transformStamped = tfBuffer.lookupTransform ( "ar_marker","ardrone_base_bottomcam",ros::Time ( 0 ) );
+                        transformStamped = tf_buffer.lookupTransform ( "ar_marker","ardrone_base_bottomcam",ros::Time ( 0 ) );
                 } catch ( tf2::TransformException &ex ) {
                         ROS_WARN ( "%s",ex.what() );
                         ros::Duration ( 1.0 ).sleep();
@@ -103,64 +103,51 @@ int main ( int argc, char **argv )
                         if ( was_reverse == true ) {
                                 multiplyer = -1;
                         }
-                        offset.setRoll( - multiplyer * transformStamped.transform.translation.x);
-                        offset.setPitch( - multiplyer * transformStamped.transform.translation.y);
-                        offset.setGaz(- abs ( transformStamped.transform.translation.z ));
-                        offset.setYaw ( ( float ) yaw * 180 / PI );
+                        offset.SetRoll( - multiplyer * transformStamped.transform.translation.x);
+                        offset.SetPitch( - multiplyer * transformStamped.transform.translation.y);
+                        offset.SetGaz(- abs ( transformStamped.transform.translation.z ));
+                        offset.SetYaw ( ( float ) yaw * 180 / PI );
                 } else {
-						offset.setRoll( - transformStamped.transform.translation.x);
-                        offset.setPitch(- transformStamped.transform.translation.y);
-                        offset.setGaz(- abs ( transformStamped.transform.translation.z ));
-                        offset.setYaw( ( ( float ) yaw * 180 / PI ));
+						offset.SetRoll( - transformStamped.transform.translation.x);
+                        offset.SetPitch(- transformStamped.transform.translation.y);
+                        offset.SetGaz(- abs ( transformStamped.transform.translation.z ));
+                        offset.SetYaw( ( ( float ) yaw * 180 / PI ));
                         was_reverse = true;
                 }
                 
                  /* Plot the offsets calculated with TF
                  */
-                offset_msg.x = ( offset.getRoll() );
-                offset_msg.y = ( offset.getPitch() );
-                offset_msg.z = ( offset.getGaz() )	;
+                offset_msg.x = ( offset.GetRoll() );
+                offset_msg.y = ( offset.GetPitch() );
+                offset_msg.z = ( offset.GetGaz() )	;
                 linear_offset_pub.publish ( offset_msg );
-                yaw_msg.data = offset.getYaw();
+                yaw_msg.data = offset.GetYaw();
                 rotational_offset_pub.publish<> ( yaw_msg );
                 // ------------------------------------
 
-                std_msgs::String clear, autoinit,takeoff,goTo,land, moveBy, reference, maxControl, initialReachDist, stayWithinDist, stayTime;
+                std_msgs::String clear, auto_init,take_off,go_to, move_by_rel ,land, reference, max_control, initial_reach_dist, stay_within_dist, stay_time;
 
-                if ( abs ( offset.getRoll() ) < target_X ) {
-                        offset.setRoll(0);
-                }
-
-                if ( abs ( offset.getPitch() ) < target_Y ) {
-                        offset.setPitch(0);
-                }
-
-                if ( abs ( offset.getGaz() ) < target_Z ) {
-                        offset.setGaz(0);
-                }
-
-                if ( abs ( offset.getYaw() ) < target_yaw ) {
-                        offset.setYaw(0);
-                }
+                 // Modify current_offset in proximity of the target
+                offset.ReduceOffsetToZero( offset,target_x,target_y,target_z,target_yaw ) ;
 
                 clear.data = "c clearCommands";
 
-                autoinit.data = "c autoInit 500 800";
+                auto_init.data = "c autoInit 500 800";
                 reference.data = "setReference $POSE$";
-                maxControl.data = "setMaxControl 1";
-                initialReachDist.data = "setInitialReachDist 0.1";
-                stayWithinDist.data = "setStayWithinDist 0.1";
-                stayTime.data = "setStayTime 0.5";
+                max_control.data = "setMaxControl 1";
+                initial_reach_dist.data = "setInitialReachDist 0.1";
+                stay_within_dist.data = "setStayWithinDist 0.1";
+                stay_time.data = "setStayTime 0.5";
 
-                takeoff.data = "c takeoff";
+                take_off.data = "c takeoff";
 
-                moveBy.data = "c moveByRel " + boost::lexical_cast<std::string> ( offset.getRoll() ) + " " + boost::lexical_cast<std::string> ( offset.getPitch() ) + " " +
-                              boost::lexical_cast<std::string> ( offset.getGaz() ) + " " + boost::lexical_cast<std::string> ( offset.getYaw() ) ;
+                move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( offset.GetRoll() ) + " " + boost::lexical_cast<std::string> ( offset.GetPitch() ) + " " +
+                              boost::lexical_cast<std::string> ( offset.GetGaz() ) + " " + boost::lexical_cast<std::string> ( offset.GetYaw() ) ;
                 land.data = "c land";
 
                 int currentTimeInSec = ( int ) ros::Time::now().sec;
 
-                if ( moveBy.data.compare ( "c moveByRel 0 0 0 0" ) == 0 ) {
+                if ( move_by_rel.data.compare ( "c moveByRel 0 0 0 0" ) == 0 ) {
                         ROS_INFO ( "Destination reached" );
                         cmd_pub.publish<> ( land );
                         ros::shutdown();
@@ -172,32 +159,32 @@ int main ( int argc, char **argv )
                  */
                 if ( currentTimeInSec == last_msg ) {
                         cmd_pub.publish<> ( clear );
-                        cmd_pub.publish<> ( autoinit );
+                        cmd_pub.publish<> ( auto_init );
                         cmd_pub.publish<> ( reference );
-                        cmd_pub.publish<> ( maxControl );
-                        cmd_pub.publish<> ( initialReachDist );
-                        cmd_pub.publish<> ( stayWithinDist );
-                        cmd_pub.publish<> ( stayTime );
+                        cmd_pub.publish<> ( max_control );
+                        cmd_pub.publish<> ( initial_reach_dist );
+                        cmd_pub.publish<> ( stay_within_dist );
+                        cmd_pub.publish<> ( stay_time );
                         //cmd_pub.publish<> ( takeoff );
-                        cmd_pub.publish<> ( moveBy );
+                        cmd_pub.publish<> ( move_by_rel );
 
                         //cout << "alive" << endl;
-                        cout << moveBy.data << endl;
+                        cout << move_by_rel.data << endl;
                         cout <<  endl;
                         //ros::Duration ( 1.0 ).sleep();
                 } else {
                         ROS_WARN ( "Marker is lost!" );
                         cmd_pub.publish<> ( clear );
-                        cmd_pub.publish<> ( autoinit );
+                        cmd_pub.publish<> ( auto_init );
                         cmd_pub.publish<> ( reference );
-                        cmd_pub.publish<> ( maxControl );
-                        cmd_pub.publish<> ( initialReachDist );
-                        cmd_pub.publish<> ( stayWithinDist );
-                        cmd_pub.publish<> ( stayTime );
+                        cmd_pub.publish<> ( max_control );
+                        cmd_pub.publish<> ( initial_reach_dist );
+                        cmd_pub.publish<> ( stay_within_dist );
+                        cmd_pub.publish<> ( stay_time );
                         //cmd_pub.publish<> ( takeoff );
-                        moveBy.data = "c moveByRel 0 0 0.2 0";
-                        cmd_pub.publish<> ( moveBy );
-                        cout << moveBy.data << endl;
+                        move_by_rel.data = "c moveByRel 0 0 0.2 0";
+                        cmd_pub.publish<> ( move_by_rel );
+                        cout << move_by_rel.data << endl;
                         cout <<  endl;
                         //ros::Duration ( 1.0 ).sleep();
                 }
