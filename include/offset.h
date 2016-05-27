@@ -2,6 +2,7 @@
 #define OFFSET_H
 
 
+
 class Offset{
 public:
 	
