@@ -249,17 +249,14 @@ int main ( int argc, char **argv )
               cmd_pub.publish<>(stay_time);
               */
 
-              // cout << last_view_offset.GetRoll() << " " <<
-              // last_view_offset.GetPitch() << " " <<  last_view_offset.GetGaz() <<
-              // " " <<  last_view_offset.GetYaw() << endl;
-
+              k_roll = k_pitch = k_gaz = 1.0;
               // Redirect the drone towards the last position i which the drone was
               // seen
               // FIXME: Check the logic of this code
               move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( -k_roll * last_view_offset.GetRoll() ) + " "+
                                  boost::lexical_cast<std::string> ( -k_pitch * last_view_offset.GetPitch() ) + " " +
                                  boost::lexical_cast<std::string> ( -k_gaz * last_view_offset.GetGaz() ) + " " +
-                                 boost::lexical_cast<std::string> ( last_view_offset.GetYaw() );
+                                 boost::lexical_cast<std::string> ( -last_view_offset.GetYaw() );
 
               cmd_pub.publish<> ( move_by_rel );
               cout << move_by_rel.data << endl;
@@ -294,6 +291,7 @@ float getCompensatoryFactor ( double current_offset, double last_offset, int cou
       break;
       // Pitch
     case ( 2 ) :
+			angular_coefficient = 1.0;
       break;
       // Gaz
     case ( 3 ) :

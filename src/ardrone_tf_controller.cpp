@@ -1,188 +1,368 @@
-#include <ros/ros.h>
+#include "ros/ros.h"
+#include "ros/package.h"
 #include <ros/node_handle.h>
 #include <cv_bridge/cv_bridge.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/Vector3.h>
 #include <geometry_msgs/Twist.h>
+#include "std_msgs/String.h"
 #include <ar_pose/ARMarker.h>
 #include <tf2/transform_datatypes.h>
 #include <tf2_ros/transform_listener.h>
+#include <tf/LinearMath/Matrix3x3.h>
+#include <boost/lexical_cast.hpp>
+#include "sensor_msgs/ChannelFloat32.h"
+#include "std_msgs/Float32.h"
+#include "../include/offset.h"
+#include <std_srvs/Empty.h>
+#include <ros/service_client.h>
+
+int last_msg = 0;
+const double PI = 3.141593;
+unsigned int ros_header_timestamp_base = 0;
 
 using namespace std;
-using namespace cv;
 
-/*
-void printPose ( const ar_pose::ARMarker::ConstPtr &msg )
+float getCompensatoryFactor ( double current_offset, double last_offset, int count, bool &axisCrossed, double target,
+                              int type );
+
+// Save the timestamp of the last time the marker has been seen
+void markerCallback ( const ar_pose::ARMarker::ConstPtr msg )
 {
-        tf::Pose marker_pose_in_camera;
+	ROS_INFO ( "Marker detected!" );
+  last_msg = msg->header.stamp.sec;
+}
 
-
-        marker_pose_in_camera.setOrigin (tf::Vector3 (msg->pose.pose.position.x,
-                                         msg->pose.pose.position.y,
-                                         msg->pose.pose.position.z));
-
-
-        cout<<"-------------"<<endl;
-        cout<<"x :" << msg->pose.pose.position.x<<endl;
-        cout<<"y :" << msg->pose.pose.position.y<<endl;
-        cout<<"z :" << msg->pose.pose.position.z<<endl;
-        cout<<"-------------"<<endl;
-}*/
-
-int main(int argc, char **argv)
+int main ( int argc, char **argv )
 {
-  ros::init(argc, argv, "pose_subscriber");
-  ROS_INFO("TF subscriber correctly running...");
+  ros::init ( argc, argv, "pose_subscriber" );
+  ROS_INFO ( "TF subscriber correctly running..." );
   ros::NodeHandle nh;
-  // ros::Subscriber pose_sub=nh.subscribe<> ( "ar_pose_marker",1000,printPose
-  // );
-  ros::Publisher vel_pub = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
-  tf2_ros::Buffer tfBuffer;
-  tf2_ros::TransformListener tf_listener(tfBuffer);
-  ros::Rate rate(2.0);
-  ros::Publisher errors_pub = nh.advertise<geometry_msgs::Vector3>("/position_errors", 10);
+  tf2_ros::Buffer tf_buffer;
+  tf2_ros::TransformListener tf_listener ( tf_buffer );
+  ros::Rate rate ( 1.0 );
+  // For uga_tum_ardrone -> spring damped controller
+  ros::Publisher cmd_pub = nh.advertise<std_msgs::String> ( "/uga_tum_ardrone/com", 100 );
+  // For tum_ardrone -> PID controller
+  //ros::Publisher cmd_pub = nh.advertise<std_msgs::String>("/tum_ardrone/com", 100);
+  ros::Subscriber marker_sub = nh.subscribe ( "/ar_pose_marker", 1, markerCallback );
+  ros::Publisher linear_offset_pub = nh.advertise<geometry_msgs::Vector3> ( "/linear_offset", 100 );
+  ros::Publisher rotational_offset_pub = nh.advertise<std_msgs::Float32> ( "/rotation_offset", 100 );
+  //Service client for change the camera feedback
+  ros::ServiceClient client = nh.serviceClient<std_srvs::Empty> ( "/ardrone/togglecam" );
+  geometry_msgs::Vector3 offset_msg;
+  std_msgs::Float32 yaw_msg;
 
-  while (nh.ok())
-  {
-    geometry_msgs::TransformStamped transformStamped;
-    geometry_msgs::Vector3 errors_msg;
-    try
+  // Define the commands to be sent to the controller
+  std_msgs::String clear, auto_init, take_off, go_to, move_by_rel, land, reference, max_control, initial_reach_dist,
+           stay_within_dist, stay_time;
+  clear.data = "c clearCommands";
+  auto_init.data = "c autoInit 500 800";
+  reference.data = "setReference $POSE$";
+  max_control.data = "setMaxControl 1";
+  initial_reach_dist.data = "setInitialReachDist 0.1";
+  stay_within_dist.data = "setStayWithinDist 0.1";
+  stay_time.data = "setStayTime 0.5";
+  take_off.data = "c takeoff";
+  land.data = "c land";
+
+  //Record with camera is in use (true=frontcam, false=bottomcam)
+  bool front_camera = true;
+
+  //Count how many times camera has changed
+  int camera_count = 0;
+
+  // Save the translation and rotational offsets on three axis
+  Offset current_offset;
+  current_offset.SetRoll ( 0 );
+  current_offset.SetPitch ( 0 );
+  current_offset.SetGaz ( 0 );
+  current_offset.SetYaw ( 0 );
+  Offset last_view_offset, compensatory_offset;
+  last_view_offset.SetOffset ( current_offset );
+
+  // Keep counting of the algorithm's number of iterations
+  int count = 0;
+
+  // Compensatory factors for movements along 3 axis
+  float k_roll, k_pitch, k_gaz;
+
+  tfScalar roll, pitch, yaw;
+
+  // Parameters for identifing when the drone reaches the target
+  float target_x, target_y, target_z, target_yaw;
+  float epsilon;
+
+  // Set to true if drone has overcome the X axis
+  bool x_axis_crossed = false;
+  bool y_axis_crossed = false;
+  bool z_axis_crossed = false;
+
+  bool branch_unsafe = false;
+
+  bool was_reverse = false;
+
+  // Load parameters from param server
+  nh.getParam ( "/ardrone_tf_controller/target_X", target_x );   // expressed in meters ( default: 0.1 )
+  nh.getParam ( "/ardrone_tf_controller/target_Y", target_y );   // expressed in meters ( default: 0.1 )
+  nh.getParam ( "/ardrone_tf_controller/target_Z", target_z );   // expressed in meters ( default: 0.4 )
+  nh.getParam ( "/ardrone_tf_controller/target_yaw", target_yaw ); // expressed in degress ( default: 5.0 )
+  nh.getParam ( "/ardrone_tf_controller/epsilon", epsilon );     // error variable on
+  // rotation expressed
+  // in radiants (
+  // default: 0.78 )
+
+  while ( nh.ok() )
     {
-      transformStamped = tfBuffer.lookupTransform("ar_marker", "ardrone_base_frontcam", ros::Time(0));
+      // Get transform from the drone and the frontcamera
+      geometry_msgs::TransformStamped transform_stamped;
+      try
+        {
+          transform_stamped = tf_buffer.lookupTransform ( "ar_marker", "ardrone_base_bottomcam", ros::Time ( 0 ) );
+        }
+      catch ( tf2::TransformException &ex )
+        {
+          ROS_WARN ( "%s", ex.what() );
+          ros::Duration ( 1.0 ).sleep();
+          continue;
+        }
+
+      // Get rotation expressed in quaternion, transform it in a rotation matrix
+      // and then retrieve roll pitch and yaw
+      tf::Quaternion q ( transform_stamped.transform.rotation.x, transform_stamped.transform.rotation.y,
+                         transform_stamped.transform.rotation.z, transform_stamped.transform.rotation.w );
+      tf::Matrix3x3 m ( q );
+      m.getRPY ( roll, pitch, yaw );
+
+      if ( ( yaw > -epsilon ) && ( yaw < epsilon ) )
+        {
+          // Multiplyer changes coordinates frame if the drone was previously revers
+          // wrt to the marker
+          int multiplyer = 1;
+          if ( was_reverse == true )
+            {
+              multiplyer = -1;
+            }
+          current_offset.SetRoll ( -multiplyer * transform_stamped.transform.translation.x );
+          current_offset.SetPitch ( -multiplyer * transform_stamped.transform.translation.y );
+          current_offset.SetGaz ( -abs ( transform_stamped.transform.translation.z ) );
+          //Descend only if you are using the bottom camera
+          /*if ( front_camera == true )
+            {
+              current_offset.SetGaz ( 0 );
+            }*/
+          current_offset.SetYaw ( ( float ) yaw * 180 / PI );
+        }
+      else
+        {
+          current_offset.SetRoll ( -transform_stamped.transform.translation.x );
+          current_offset.SetPitch ( -transform_stamped.transform.translation.y );
+          current_offset.SetGaz ( -abs ( transform_stamped.transform.translation.z ) );
+          //Descend only if you are using the bottom camera
+          if ( front_camera == true )
+            /*{
+              //ROS_INFO ( "Inside bottom camera" );
+              current_offset.SetGaz ( 0 );
+            }*/
+          current_offset.SetYaw ( ( ( float ) yaw * 180 / PI ) );
+          was_reverse = true;
+        }
+
+
+      // Publish the offsets ----------------
+      offset_msg.x = ( current_offset.GetRoll() );
+      offset_msg.y = ( current_offset.GetPitch() );
+      offset_msg.z = ( current_offset.GetGaz() );
+      linear_offset_pub.publish ( offset_msg );
+      yaw_msg.data = current_offset.GetYaw();
+      rotational_offset_pub.publish<> ( yaw_msg );
+      // ------------------------------------
+
+      // Create a copy of the current_offset to evaluate the compensatory factor
+      compensatory_offset.SetOffset ( current_offset );
+
+      // Modify current_offset in proximity of the target
+      current_offset.ReduceOffsetToZero ( current_offset, target_x, target_y, target_z, target_yaw );
+
+      // Create the navigation command
+			//TODO: if the distance on X and Y is higher than a threshold, when using front camera just translate!
+      move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( current_offset.GetRoll() ) + " " +
+                         boost::lexical_cast<std::string> ( current_offset.GetPitch() ) + " " +
+                         boost::lexical_cast<std::string> ( current_offset.GetGaz() ) + " " +
+                         boost::lexical_cast<std::string> ( current_offset.GetYaw() );
+
+
+
+
+      // If the time stamp of the last message is equal to the current
+      // time, it means the marker has been correctly detected,otherwise it has
+      // been lost
+
+      k_roll = k_pitch = k_gaz = 1;
+
+      if ( last_msg == 0 )
+        {
+          // do nothing
+        }
+      else
+        {
+          int current_time_sec = ( int ) ros::Time::now().toSec();
+          // Marker has been reached
+          //TODO: Move this somewehre after the marker has been seen, and keep position only if the marker continue to be seen
+          if ( move_by_rel.data.compare ( "c moveByRel 0 0 0 0" ) == 0 )
+            {
+              ROS_INFO ( "Destination reached" );
+              cmd_pub.publish<> ( land );
+              ros::shutdown();
+            }
+
+          // FIXME: Test this time-depending comparison - maybe it's a good idea
+          // to give 3 seconds for network issue
+          if ( current_time_sec <= ( last_msg + 3 ) )
+            {
+              cmd_pub.publish<> ( clear );
+              // Initialize the controller just before the flight
+              if ( count == 1 )
+                {
+                  ROS_INFO ( "Initialization" );
+                  cmd_pub.publish<> ( auto_init );
+                  cmd_pub.publish<> ( reference );
+                  cmd_pub.publish<> ( max_control );
+                  cmd_pub.publish<> ( initial_reach_dist );
+                  cmd_pub.publish<> ( stay_within_dist );
+                  cmd_pub.publish<> ( stay_time );
+                  // cmd_pub.publish<> ( takeoff );
+                }
+              else
+                {
+                  // TODO: Implement the update for k_pitch (probably not necessary)
+                  // and k_gaz
+                  // Update the compensatory factor for drift on roll
+                  // 1 -> roll
+                  // 2 -> pitch
+                  // 3 -> gaz
+                  //k_roll = getCompensatoryFactor ( compensatory_offset.GetRoll(), last_view_offset.GetRoll(), count,
+                  //                                 x_axis_crossed, target_x, 1 );
+                  //k_pitch = getCompensatoryFactor ( compensatory_offset.GetPitch(), last_view_offset.GetPitch(), count,
+                  //                                  y_axis_crossed, target_y, 2 );
+                  //k_gaz = getCompensatoryFactor ( compensatory_offset.GetGaz(), last_view_offset.GetGaz(), count,
+                  //                                z_axis_crossed, target_z, 3 );
+
+                  // Update the navigation command
+                  move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( k_roll * current_offset.GetRoll() ) +
+                                     " " + boost::lexical_cast<std::string> ( k_pitch * current_offset.GetPitch() ) + " " +
+                                     boost::lexical_cast<std::string> ( k_gaz * current_offset.GetGaz() ) + " " +
+                                     boost::lexical_cast<std::string> ( current_offset.GetYaw() );
+
+                  cmd_pub.publish<> ( move_by_rel );
+                  cout << move_by_rel.data << endl;
+                  // Update the last offset
+                  last_view_offset.SetOffset ( compensatory_offset );
+                }
+
+              cout << endl;
+            }
+          else
+            {
+              ROS_ERROR ( "Marker is lost!" );
+              ROS_ERROR ( "CurrentTime is %d while last_msg is %d", current_time_sec, last_msg );
+
+              // switch camera
+              std_srvs::EmptyRequest req;
+              std_srvs::EmptyResponse res;
+							if(front_camera == true){
+                  ros::service::call<> ( "/ardrone/togglecam", req, res );
+                  front_camera = !front_camera;
+                  camera_count++;
+									ROS_WARN ( "Camera changed" );
+							}
+
+              cmd_pub.publish<> ( clear );
+
+
+              if ( count > 1 )
+                {
+
+                  k_roll = k_pitch = k_gaz = 1.0;
+                  // Redirect the drone towards the last position in which the drone was
+                  // seen
+                  // FIXME: Check the logic of this code
+                  move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( - k_roll * last_view_offset.GetRoll() ) + " "+
+                                     boost::lexical_cast<std::string> ( k_pitch * last_view_offset.GetPitch() ) + " " +
+                                     boost::lexical_cast<std::string> ( - k_gaz * last_view_offset.GetGaz() ) + " " +
+                                     boost::lexical_cast<std::string> ( last_view_offset.GetYaw() );
+
+                  cmd_pub.publish<> ( move_by_rel );
+                  cout << move_by_rel.data << endl;
+                  cout << endl;
+                }
+            }
+        }
+
+      bool x_axis_crossed = false;
+      bool y_axis_crossed = false;
+      bool z_axis_crossed = false;
+      count++;
+      rate.sleep();
+      ros::spinOnce();
     }
-    catch (tf2::TransformException &ex)
-    {
-      ROS_WARN("%s", ex.what());
-      ros::Duration(1.0).sleep();
-      continue;
-    }
 
-    // Save the translation and rotational offsets on three axis
-    float linear_offset_X, linear_offset_Y, linear_offset_Z;
-    float rotational_offset_Z;
-    linear_offset_X = transformStamped.transform.translation.x;
-    linear_offset_Y = transformStamped.transform.translation.y;
-    linear_offset_Z = transformStamped.transform.translation.z;
-    rotational_offset_Z = transformStamped.transform.rotation.z;
-
-    // Adjust distance on the global X axis - z for marker and camera
-    // Adjust distance on the global y axis - x for marker and camera
-    // Adjust distance on the global z axis - y for marker and camera
-
-    // Create the twist message
-    geometry_msgs::Twist vel_msg;
-
-    // PID gains
-    double kp_roll_pitch = 0.001;
-    double ki_roll_pitch = 0.001;
-    double kd_roll_pitch = 0.001;
-
-    double kp_yaw = 0.001;
-    double ki_yaw = 0.001;
-    double kd_yaw = 0.001;
-
-    double kp_gaz = 0.001;
-    double ki_gaz = 0.001;
-    double kd_gaz = 0.001;
-
-    // Errors
-    double linear_error_x = linear_offset_Z;
-    double linear_error_y = linear_offset_X;
-    double linear_error_z = linear_offset_Y;
-    double rotational_error_z = rotational_offset_Z;
-
-    // Time [s]
-    static int64 last_t = 0.0;
-    double dt = (cv::getTickCount() - last_t) / cv::getTickFrequency();
-    last_t = cv::getTickCount();
-
-    // Integral terms
-    static double linear_integral_x = 0.0, linear_integral_y = 0.0, linear_integral_z = 0.0,
-                  rotational_integral_z = 0.0;
-    if (dt > 0.1)
-    {
-      // Reset
-      linear_integral_x = 0.0;
-      linear_integral_y = 0.0;
-      linear_integral_z = 0.0;
-      rotational_integral_z = 0.0;
-    }
-    linear_integral_x += linear_error_x * dt;
-    linear_integral_y += linear_error_y * dt;
-    linear_integral_z += linear_error_z * dt;
-    rotational_integral_z += rotational_error_z * dt;
-
-    // Derivative terms
-    static double linear_previous_error_x = 0.0, linear_previous_error_y = 0.0, linear_previous_error_z = 0.0,
-                  rotational_previous_error_z = 0.0;
-    if (dt > 0.1)
-    {
-      // Reset
-      linear_previous_error_x = 0.0;
-      linear_previous_error_y = 0.0;
-      linear_previous_error_z = 0.0;
-      rotational_previous_error_z = 0.0;
-    }
-    double linear_derivative_x = (linear_error_x - linear_previous_error_x) / dt;
-    double linear_derivative_y = (linear_error_y - linear_previous_error_y) / dt;
-    double linear_derivative_z = (linear_error_z - linear_previous_error_z) / dt;
-    double rotational_derivative_z = (rotational_error_z - rotational_previous_error_z) / dt;
-    linear_previous_error_x = linear_error_x;
-    linear_previous_error_y = linear_error_y;
-    linear_previous_error_z = linear_error_z;
-    rotational_previous_error_z = rotational_error_z;
-
-    cout << "error_x : " << linear_error_x << ", error_y : " << linear_error_y << ", error_z : " << linear_error_z
-         << ", rotational_error : " << rotational_error_z << endl;
-    if (linear_error_x > 0.6 || (linear_error_y > 0.05 || linear_error_y < -0.05))
-    {
-      kp_roll_pitch = 0.5;  //  0.35
-      ki_roll_pitch = 0;
-      kd_roll_pitch = 0.32;  // 0.35
-    }
-
-    if (rotational_error_z > 0.1 || rotational_error_z < -0.1)
-    {
-      kp_yaw = 0.02;  // 0.5
-      ki_yaw = 0.0;   // 0.0
-      kd_yaw = 0.0;   // 0.1
-    }
-
-    if (linear_error_z < -0.05 || linear_error_z > 0.05)
-    {
-      kp_gaz = 0.6;   // 0.5
-      ki_gaz = 0.01;  // 0.1
-      kd_gaz = 0.2;   // 0.3
-    }
-
-    vel_msg.linear.x =
-        kp_roll_pitch * linear_error_x + ki_roll_pitch * linear_integral_x + kd_roll_pitch * linear_derivative_x;
-    vel_msg.linear.y =
-        kp_roll_pitch * linear_error_y + ki_roll_pitch * linear_integral_y + kd_roll_pitch * linear_derivative_y;
-    vel_msg.linear.z = -(kp_gaz * linear_error_z + ki_gaz * linear_integral_z + kd_gaz * linear_derivative_z);
-
-    vel_msg.angular.z =
-        -(kp_yaw * rotational_error_z + ki_yaw * rotational_integral_z + kd_yaw * rotational_derivative_z);
-
-    errors_msg.x = linear_error_x;
-    errors_msg.y = linear_error_y;
-    errors_msg.z = linear_error_z;
-
-    // cout << "kp = " << kp << " , ki = " << ki << " , kd = " << kd << endl;
-    cout << "(vx, vy, vz) : "
-         << "(" << vel_msg.linear.x << ", " << vel_msg.linear.y << ", " << vel_msg.linear.z << ")" << endl;
-    cout << "Rotational speed on z : " << vel_msg.angular.z << endl;
-    cout << "------------------------------------" << endl;
-
-    vel_pub.publish(vel_msg);
-    errors_pub.publish<>(errors_msg);
-
-    vel_msg.linear.x = vel_msg.linear.y = 0;
-    vel_msg.angular.z = 0.0;
-
-    rate.sleep();
-  }
-
-  ros::spin();
   return 0;
+}
+
+// Update the value of the compensatory factor for the drift
+float getCompensatoryFactor ( double current_offset, double last_offset, int count, bool &axis_crossed, double target,
+                              int type )
+{
+  float tmp_compensatory_factor = 1.0;
+  int ordinata = 1.0;
+  float angular_coefficient;
+
+  switch ( type )
+    {
+      // Roll
+    case ( 1 ) :
+      angular_coefficient = 40.0;
+      break;
+      // Pitch
+    case ( 2 ) :
+      angular_coefficient = 1.0;
+      break;
+      // Gaz
+    case ( 3 ) :
+      angular_coefficient = 1.0;
+      break;
+    }
+
+  // count = 1 Initialization
+  // count = 2 First detection (last_view_offset = 0)
+  // TODO: If the drone has overcome the virtual axis, keep the compensatory
+  // factor high while he has an offset higher the target_X
+  if ( last_offset * current_offset <= 0 && count > 2 )
+    {
+      if ( axis_crossed == false )
+        axis_crossed = true;
+    }
+  // cout << "Boolean variable status: " << x_axis_crossed << endl;
+
+  if ( axis_crossed == true )
+    {
+      switch ( type )
+        {
+        case ( 1 ) :
+          ROS_WARN ( "Virtual X axis crossed" );
+          break;
+        case ( 2 ) :
+          ROS_WARN ( "Virtual Y axis crossed" );
+          break;
+        case ( 3 ) :
+          ROS_WARN ( "Virtual Z axis crossed" );
+          break;
+        }
+      // FIXME: Modify tmpCompensatoryFactor to decrease as linear function
+      tmp_compensatory_factor = max ( 1.0, angular_coefficient * ( abs ( current_offset ) - abs ( target ) ) + ordinata );
+    }
+
+  cout << "Inside function: " << type << " : " << tmp_compensatory_factor << endl;
+  return tmp_compensatory_factor;
 }
