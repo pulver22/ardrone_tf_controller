@@ -20,6 +20,7 @@
 int last_msg = 0;
 const double PI = 3.141593;
 unsigned int ros_header_timestamp_base = 0;
+bool marke_detected = false;
 
 using namespace std;
 
@@ -29,8 +30,9 @@ float getCompensatoryFactor ( double current_offset, double last_offset, int cou
 // Save the timestamp of the last time the marker has been seen
 void markerCallback ( const ar_pose::ARMarker::ConstPtr msg )
 {
-	ROS_INFO ( "Marker detected!" );
+  ROS_INFO ( "Marker detected!" );
   last_msg = msg->header.stamp.sec;
+  marke_detected = true;
 }
 
 int main ( int argc, char **argv )
@@ -68,6 +70,9 @@ int main ( int argc, char **argv )
 
   //Record with camera is in use (true=frontcam, false=bottomcam)
   bool front_camera = true;
+	
+	// Record if the drone is looking good in the same direction of the marker
+	bool looking_good = false;
 
   //Count how many times camera has changed
   int camera_count = 0;
@@ -83,6 +88,9 @@ int main ( int argc, char **argv )
 
   // Keep counting of the algorithm's number of iterations
   int count = 0;
+	
+	// Keep counting of how many messaged you lost
+	int lost_count = 0;
 
   // Compensatory factors for movements along 3 axis
   float k_roll, k_pitch, k_gaz;
@@ -92,6 +100,9 @@ int main ( int argc, char **argv )
   // Parameters for identifing when the drone reaches the target
   float target_x, target_y, target_z, target_yaw;
   float epsilon;
+
+  //Parameter for limiting pure translation with front camera
+  float pure_translation_X, pure_translation_Y;
 
   // Set to true if drone has overcome the X axis
   bool x_axis_crossed = false;
@@ -107,10 +118,9 @@ int main ( int argc, char **argv )
   nh.getParam ( "/ardrone_tf_controller/target_Y", target_y );   // expressed in meters ( default: 0.1 )
   nh.getParam ( "/ardrone_tf_controller/target_Z", target_z );   // expressed in meters ( default: 0.4 )
   nh.getParam ( "/ardrone_tf_controller/target_yaw", target_yaw ); // expressed in degress ( default: 5.0 )
-  nh.getParam ( "/ardrone_tf_controller/epsilon", epsilon );     // error variable on
-  // rotation expressed
-  // in radiants (
-  // default: 0.78 )
+  nh.getParam ( "/ardrone_tf_controller/epsilon", epsilon );     // error variable on rotation expressed in radiants ( default: 0.78 )
+  nh.getParam ( "/ardrone_tf_controller/pure_translation_X", pure_translation_X );	//expressed in meters (default:1.5)
+  nh.getParam ( "/ardrone_tf_controller/pure_translation_Y", pure_translation_Y );	//expressed in meters (default: 1.5)
 
   while ( nh.ok() )
     {
@@ -133,14 +143,24 @@ int main ( int argc, char **argv )
                          transform_stamped.transform.rotation.z, transform_stamped.transform.rotation.w );
       tf::Matrix3x3 m ( q );
       m.getRPY ( roll, pitch, yaw );
-
-      if ( ( yaw > -epsilon ) && ( yaw < epsilon ) )
+			/*
+			cout << "----------------"<< endl;
+			cout << "Roll: " << roll <<", Pitch: " << pitch << ", Yaw: " << yaw << endl;
+			cout << "----------------"<< endl;
+			*/
+			if(marke_detected == true)
+			{
+      cout << "Frontcamera value: " << front_camera << endl;
+      cout << abs ( yaw ) << " : " << abs(epsilon ) <<  endl;
+			
+      if ( ( ( yaw > -epsilon ) && ( yaw < epsilon ) && front_camera == false ) || ( ( abs ( yaw ) < (PI/2 ) ) && front_camera == true ) )
         {
-          // Multiplyer changes coordinates frame if the drone was previously revers
-          // wrt to the marker
+					cout << "Branch 1: drone loooking good" << endl;
+          // Multiplyer changes coordinates frame if the drone was previously revers wrt to the marker
           int multiplyer = 1;
           if ( was_reverse == true )
             {
+              ROS_INFO ( "Reversed!" );
               multiplyer = -1;
             }
           current_offset.SetRoll ( -multiplyer * transform_stamped.transform.translation.x );
@@ -152,21 +172,28 @@ int main ( int argc, char **argv )
               current_offset.SetGaz ( 0 );
             }*/
           current_offset.SetYaw ( ( float ) yaw * 180 / PI );
+					
+					looking_good = true;
         }
       else
         {
-          current_offset.SetRoll ( -transform_stamped.transform.translation.x );
-          current_offset.SetPitch ( -transform_stamped.transform.translation.y );
+					cout << "Branch 2: drone has to align" << endl;
+          int multiplyer = 1;
+          
+          current_offset.SetRoll (  multiplyer * transform_stamped.transform.translation.x );
+          current_offset.SetPitch ( multiplyer * transform_stamped.transform.translation.y );
+					
+					if ( front_camera == true && abs(yaw) < abs(PI/2 + epsilon ))
+            {	cout << "Front camera" << endl;
+              current_offset.SetRoll ( - multiplyer * transform_stamped.transform.translation.y );
+							current_offset.SetPitch (  multiplyer * transform_stamped.transform.translation.x );
+            }
           current_offset.SetGaz ( -abs ( transform_stamped.transform.translation.z ) );
-          //Descend only if you are using the bottom camera
-          if ( front_camera == true )
-            /*{
-              //ROS_INFO ( "Inside bottom camera" );
-              current_offset.SetGaz ( 0 );
-            }*/
           current_offset.SetYaw ( ( ( float ) yaw * 180 / PI ) );
           was_reverse = true;
+					looking_good = false;
         }
+			}
 
 
       // Publish the offsets ----------------
@@ -181,24 +208,25 @@ int main ( int argc, char **argv )
       // Create a copy of the current_offset to evaluate the compensatory factor
       compensatory_offset.SetOffset ( current_offset );
 
+      //TODO: if the distance on X and Y is higher than a threshold, when using front camera just translate!
+      // If front camera is on and the drone is still far from the target, don't descend!
+      if ( front_camera == true && looking_good == false)
+        {
+          ROS_WARN ( "Yaw disabled!" );
+          current_offset.SetYaw ( 0 );
+        }
+
       // Modify current_offset in proximity of the target
       current_offset.ReduceOffsetToZero ( current_offset, target_x, target_y, target_z, target_yaw );
 
       // Create the navigation command
-			//TODO: if the distance on X and Y is higher than a threshold, when using front camera just translate!
       move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( current_offset.GetRoll() ) + " " +
                          boost::lexical_cast<std::string> ( current_offset.GetPitch() ) + " " +
                          boost::lexical_cast<std::string> ( current_offset.GetGaz() ) + " " +
                          boost::lexical_cast<std::string> ( current_offset.GetYaw() );
 
-
-
-
-      // If the time stamp of the last message is equal to the current
-      // time, it means the marker has been correctly detected,otherwise it has
-      // been lost
-
       k_roll = k_pitch = k_gaz = 1;
+
 
       if ( last_msg == 0 )
         {
@@ -241,41 +269,49 @@ int main ( int argc, char **argv )
                   // 1 -> roll
                   // 2 -> pitch
                   // 3 -> gaz
-                  //k_roll = getCompensatoryFactor ( compensatory_offset.GetRoll(), last_view_offset.GetRoll(), count,
-                  //                                 x_axis_crossed, target_x, 1 );
-                  //k_pitch = getCompensatoryFactor ( compensatory_offset.GetPitch(), last_view_offset.GetPitch(), count,
-                  //                                  y_axis_crossed, target_y, 2 );
-                  //k_gaz = getCompensatoryFactor ( compensatory_offset.GetGaz(), last_view_offset.GetGaz(), count,
-                  //                                z_axis_crossed, target_z, 3 );
+                  k_roll = getCompensatoryFactor ( compensatory_offset.GetRoll(), last_view_offset.GetRoll(), count,
+                                                  x_axis_crossed, target_x, 1 );
+                  k_pitch = getCompensatoryFactor ( compensatory_offset.GetPitch(), last_view_offset.GetPitch(), count,
+                                                    y_axis_crossed, target_y, 2 );
+                  k_gaz = getCompensatoryFactor ( compensatory_offset.GetGaz(), last_view_offset.GetGaz(), count,
+                                                  z_axis_crossed, target_z, 3 );
 
                   // Update the navigation command
                   move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( k_roll * current_offset.GetRoll() ) +
                                      " " + boost::lexical_cast<std::string> ( k_pitch * current_offset.GetPitch() ) + " " +
                                      boost::lexical_cast<std::string> ( k_gaz * current_offset.GetGaz() ) + " " +
                                      boost::lexical_cast<std::string> ( current_offset.GetYaw() );
-
-                  cmd_pub.publish<> ( move_by_rel );
-                  cout << move_by_rel.data << endl;
+                  if ( marke_detected == true )
+                    {
+                      cmd_pub.publish<> ( move_by_rel );
+											cout << move_by_rel.data << endl;
+                    }
+                 
+									marke_detected = false;
                   // Update the last offset
                   last_view_offset.SetOffset ( compensatory_offset );
                 }
 
               cout << endl;
+							lost_count = 0;
             }
           else
             {
               ROS_ERROR ( "Marker is lost!" );
               ROS_ERROR ( "CurrentTime is %d while last_msg is %d", current_time_sec, last_msg );
-
+							
+							lost_count++;
               // switch camera
               std_srvs::EmptyRequest req;
               std_srvs::EmptyResponse res;
-							if(front_camera == true){
+              // Switch to bottomcamera when marker is lost from the frontcam
+              if ( front_camera == true )
+                {
                   ros::service::call<> ( "/ardrone/togglecam", req, res );
                   front_camera = !front_camera;
                   camera_count++;
-									ROS_WARN ( "Camera changed" );
-							}
+                  ROS_WARN ( "Camera changed" );
+                }
 
               cmd_pub.publish<> ( clear );
 
@@ -287,9 +323,9 @@ int main ( int argc, char **argv )
                   // Redirect the drone towards the last position in which the drone was
                   // seen
                   // FIXME: Check the logic of this code
-                  move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( - k_roll * last_view_offset.GetRoll() ) + " "+
-                                     boost::lexical_cast<std::string> ( k_pitch * last_view_offset.GetPitch() ) + " " +
-                                     boost::lexical_cast<std::string> ( - k_gaz * last_view_offset.GetGaz() ) + " " +
+                  move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> (  k_roll * last_view_offset.GetRoll() ) + " "+
+                                     boost::lexical_cast<std::string> (  k_pitch * last_view_offset.GetPitch() ) + " " +
+                                     boost::lexical_cast<std::string> (  k_gaz * target_z * lost_count) + " " +
                                      boost::lexical_cast<std::string> ( last_view_offset.GetYaw() );
 
                   cmd_pub.publish<> ( move_by_rel );
