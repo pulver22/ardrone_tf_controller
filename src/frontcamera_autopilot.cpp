@@ -121,6 +121,7 @@ int main ( int argc, char **argv )
                          transform_stamped.transform.rotation.z, transform_stamped.transform.rotation.w );
       tf::Matrix3x3 m ( q );
       m.getRPY ( roll, pitch, yaw );
+			//cout << " yaw: " << yaw << endl;
 
       // Save actual offsets on three axis and yaw
       if ( transform_stamped.transform.translation.z > 0 )
