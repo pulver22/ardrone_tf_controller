@@ -24,7 +24,7 @@ const double PI = 3.141593;
 unsigned int ros_header_timestamp_base = 0;
 bool marke_detected = false;
 double camera_alignment_x;
-//Record with camera is in use (true=frontcam, false=bottomcam)
+//Record with camera is in use (true(1)=frontcam, false(0)=bottomcam)
 bool front_camera;
 using namespace std;
 
@@ -191,8 +191,8 @@ int main ( int argc, char **argv )
               move_by_rel.data = "c moveByRel 0 0 1 90";
               cmd_pub.publish<> ( move_by_rel );
             }
-          count++;
           ros::Duration ( 2.0 ).sleep();
+          count++;
           continue;
         }
 
@@ -351,12 +351,12 @@ int main ( int argc, char **argv )
                   // 1 -> roll
                   // 2 -> pitch
                   // 3 -> gaz
-                  k_roll = getCompensatoryFactor ( compensatory_offset.GetRoll(), last_view_offset.GetRoll(), count,
-                                                   x_axis_crossed, target_x, 1 );
-                  k_pitch = getCompensatoryFactor ( compensatory_offset.GetPitch(), last_view_offset.GetPitch(), count,
-                                                    y_axis_crossed, target_y, 2 );
-                  k_gaz = getCompensatoryFactor ( compensatory_offset.GetGaz(), last_view_offset.GetGaz(), count,
-                                                  z_axis_crossed, target_z, 3 );
+                  //k_roll = getCompensatoryFactor ( compensatory_offset.GetRoll(), last_view_offset.GetRoll(), count,
+                  //                                 x_axis_crossed, target_x, 1 );
+                  //k_pitch = getCompensatoryFactor ( compensatory_offset.GetPitch(), last_view_offset.GetPitch(), count,
+                  //                                  y_axis_crossed, target_y, 2 );
+                  //k_gaz = getCompensatoryFactor ( compensatory_offset.GetGaz(), last_view_offset.GetGaz(), count,
+                  //                                z_axis_crossed, target_z, 3 );
 
                   // Update the navigation command
                   move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( k_roll * current_offset.GetRoll() ) +
@@ -374,7 +374,7 @@ int main ( int argc, char **argv )
                   last_view_offset.SetOffset ( compensatory_offset );
                 }
 
-                              //cout  << "Frontal camera: " << front_camera << endl;
+              //cout  << "Frontal camera: " << front_camera << endl;
 
               cout << endl;
               lost_count = 0;
@@ -386,19 +386,20 @@ int main ( int argc, char **argv )
 
               lost_count++;
               // Switch to bottomcamera when marker is lost from the frontcam
-              //cout << "Frontal camera: " << front_camera << endl;
+              cout << "Frontal camera: " << front_camera << endl;
               if ( front_camera == false )
                 {
                   ROS_INFO ( "Bottom camera alredy active!" );
                 }
               else
                 {
-									//cout << "Frontal camera: " << front_camera << endl;
+									ROS_INFO ( "Frontal camera active - switch to bottom camera" );
+                  //cout << "Frontal camera: " << front_camera << endl;
                   ros::service::call<> ( "/ardrone/togglecam", req, res );
                   front_camera = !front_camera;
                   //camera_count++;
                   ROS_WARN ( "Camera changed" );
-									//cout << "Frontal camera: " << front_camera << endl;
+                  //cout << "Frontal camera: " << front_camera << endl;
                 }
 
               cmd_pub.publish<> ( clear );
@@ -410,12 +411,22 @@ int main ( int argc, char **argv )
                   k_roll = k_pitch = k_gaz = 1.0;
                   // Redirect the drone towards the last position in which the drone was
                   // seen
-                  // FIXME: Check the logic of this code
-                  move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( k_roll * last_view_offset.GetRoll() ) + " "+
-                                     boost::lexical_cast<std::string> ( k_pitch * last_view_offset.GetPitch() ) + " " +
-                                     boost::lexical_cast<std::string> ( k_gaz * target_z * lost_count ) + " " +
-                                     boost::lexical_cast<std::string> ( last_view_offset.GetYaw() );
-
+                  // FIXME: Check the logic of this code - when the drone loose the marker after being reversed, the command shoule be fixed
+                  if ( was_reverse == true )
+                    {
+											ROS_WARN("Marker lost while reversed");
+                      move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( - k_roll * last_view_offset.GetRoll() ) + " "+
+                                         boost::lexical_cast<std::string> ( - k_pitch * last_view_offset.GetPitch() ) + " " +
+                                         boost::lexical_cast<std::string> ( k_gaz * target_z * lost_count ) + " " +
+                                         boost::lexical_cast<std::string> ( last_view_offset.GetYaw() );
+                    }
+                  else
+                    {
+                      move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( k_roll * last_view_offset.GetRoll() ) + " "+
+                                         boost::lexical_cast<std::string> ( k_pitch * last_view_offset.GetPitch() ) + " " +
+                                         boost::lexical_cast<std::string> ( k_gaz * target_z * lost_count ) + " " +
+                                         boost::lexical_cast<std::string> ( last_view_offset.GetYaw() );
+                    }
                   cmd_pub.publish<> ( move_by_rel );
                   cout << move_by_rel.data << endl;
                   cout << endl;
@@ -487,6 +498,6 @@ float getCompensatoryFactor ( double current_offset, double last_offset, int cou
       tmp_compensatory_factor = max ( 1.0, angular_coefficient * ( abs ( current_offset ) - abs ( target ) ) + ordinata );
     }
 
-  cout << "Inside function: " << type << " : " << tmp_compensatory_factor << endl;
+  //cout << "Inside function: " << type << " : " << tmp_compensatory_factor << endl;
   return tmp_compensatory_factor;
 }
