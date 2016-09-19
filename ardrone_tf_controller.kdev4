@@ -1,0 +1,3 @@
+[Project]
+Manager=KDevCMakeManager
+Name=ardrone_tf_controller
