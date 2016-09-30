@@ -60,12 +60,12 @@ void cameraCallback ( const sensor_msgs::CameraInfo msg )
   if ( msg.header.frame_id.compare ( "ardrone_base_bottomcam" ) == 0 )
     {
       front_camera = false;
-      ROS_WARN ( "Bottomcamera activated!" );
+      //ROS_WARN ( "Bottomcamera activated!" );
     }
   else if ( msg.header.frame_id.compare ( "ardrone_base_frontcam" ) == 0 )
     {
       front_camera = true;
-      ROS_WARN ( "Frontcamera activated!" );
+      //ROS_WARN ( "Frontcamera activated!" );
     }
   else ROS_ERROR ( "Camera not identified!" );
 }
@@ -160,8 +160,10 @@ int main ( int argc, char **argv )
   bool tf_lost = false;
   bool initialization_after_tf_lost = false;
   bool tf_lost_compensatory = false;
+  bool marker_was_lost = false;
+  bool critical_phase = false;
 
-  int multiplyer = 1;
+  int multiplier = 1;
 
   // Request and Response for changing camera service
   std_srvs::EmptyRequest req;
@@ -192,37 +194,20 @@ int main ( int argc, char **argv )
         // NOTE: in these two second no perceptions are done!
         if ( count > 1 )
           {
-            /*switch (front_camera)
-              {
-              case(true):
-                ROS_INFO( "Actual camera: Front camera" );
-                break;
-              case(false):
-                ROS_INFO( "Actual camera:Bottom camera" );
-                break;
-              }*/
             ros::service::call<> ( "/ardrone/togglecam", req, res );
             // call the camera callback
             camera_queue.callAvailable ( ros::WallDuration() );
             front_camera = !front_camera;
-            ROS_INFO ( "Camera changed" );
-            switch (front_camera)
-              {
-              case(true):
-                ROS_INFO( "Actual camera: Front camera" );
-                break;
-              case(false):
-                ROS_INFO( "Actual camera: Bottom camera" );
-                break;
-              }
 
-
-            // Move the drone upward to increment current camera's FOV and rotate
             cmd_pub.publish<> ( clear );
-            move_by_rel.data = "c moveByRel 0 0 0.5 30";
+            // Move the drone upward to increment current camera's FOV and rotate
+            // NOTE: I had to remove rotations because it introduces issue among frames when sending commands
+            move_by_rel.data = "c moveByRel 0 0 0.5 0";
             cmd_pub.publish<> ( move_by_rel );
             cout << move_by_rel.data << endl << endl;
             tf_lost = true;
+            was_reverse = true;
+            looking_good = false;
           }
         ros::Duration ( 0.5 ).sleep();
         count++;
@@ -237,6 +222,7 @@ int main ( int argc, char **argv )
           cmd_pub.publish(clear);
           move_by_rel.data = "c moveByRel 0 0 0 0";
           cmd_pub.publish( move_by_rel );
+
           ROS_INFO ( "Initialization" );
           cmd_pub.publish<> ( auto_init );
           cmd_pub.publish<> ( reference );
@@ -244,14 +230,13 @@ int main ( int argc, char **argv )
           cmd_pub.publish<> ( initial_reach_dist );
           cmd_pub.publish<> ( stay_within_dist );
           cmd_pub.publish<> ( stay_time );
+
           tf_lost = false;
           initialization_after_tf_lost = true;
-          continue;
         }
 
 
-      // Get rotation expressed in quaternion, transform it in a rotation matrix
-      // and then retrieve roll pitch and yaw
+      // Get rotation expressed in quaternion, transform it in a rotation matrix and then retrieve roll pitch and yaw
       tf::Quaternion q ( transform_stamped.transform.rotation.x, transform_stamped.transform.rotation.y,
                          transform_stamped.transform.rotation.z, transform_stamped.transform.rotation.w );
       tf::Matrix3x3 m ( q );
@@ -263,36 +248,29 @@ int main ( int argc, char **argv )
       tf::Matrix3x3 m_frontcam ( q_frontcam );
       m_frontcam.getRPY ( roll_frontcam, pitch_frontcam, yaw_frontcam );
 
-      /*
-      cout << "----------------"<< endl;
-      cout << "Roll: " << roll <<", Pitch: " << pitch << ", Yaw: " << yaw << endl;
-      cout << "----------------"<< endl;
-      */
 
       if ( marker_detected == true )
         {
-          //cout << "Frontcamera value: " << front_camera << endl;
-          //cout << abs ( yaw ) << " : " << abs(epsilon ) <<  endl;
-
           // NOTE: just changed front_cam to fit the stream fix
-          if ( ( ( yaw > -epsilon ) && ( yaw < epsilon ) && front_camera == true ) || ( ( abs ( yaw ) < ( PI/2 ) ) && front_camera == false ) && initialization_after_tf_lost == false)
+          if ( ( ( yaw > -epsilon ) && ( yaw < epsilon ) && front_camera == true ) || ( ( abs ( yaw ) < ( PI/2 ) ) && front_camera == false ) )
             {
               cout << "Branch 1: drone loooking good" << endl;
-              // Multiplyer changes coordinates frame if the drone was previously revers wrt to the marker
-              int multiplyer = 1;
-              if ( was_reverse == true )
+
+              /*
+              cout << "was_reversed: " << was_reverse << endl;
+              cout << "marker_was_lost: " << marker_was_lost << endl;
+              cout << "initialization_after_tf_lost: " << initialization_after_tf_lost << endl;
+              cout << "tf_lost_compensatory: " << tf_lost_compensatory << endl;
+              */
+
+              if ( ( was_reverse == true && initialization_after_tf_lost == false) || critical_phase == true )
                 {
-                  ROS_INFO ( "Reversed!" );
-                  multiplyer = -1;
+                  ROS_WARN ( "Reversed! --> Changing multiplier" );
+                  multiplier = -1;
                 }
-              current_offset.SetRoll ( -multiplyer * transform_stamped.transform.translation.x );
-              current_offset.SetPitch ( -multiplyer * transform_stamped.transform.translation.y );
+              current_offset.SetRoll ( -multiplier * transform_stamped.transform.translation.x );
+              current_offset.SetPitch ( -multiplier * transform_stamped.transform.translation.y );
               current_offset.SetGaz ( -abs ( transform_stamped.transform.translation.z ) );
-              //Descend only if you are using the bottom camera
-              /*if ( front_camera == true )
-                {
-                  current_offset.SetGaz ( 0 );
-                }*/
               current_offset.SetYaw ( ( float ) yaw * 180 / PI );
 
               looking_good = true;
@@ -300,16 +278,15 @@ int main ( int argc, char **argv )
           else
             {
               cout << "Branch 2: drone has to align" << endl;
-              multiplyer = 1;
+              //multiplier = 1;
 
-              current_offset.SetRoll ( multiplyer * transform_stamped.transform.translation.x );
-              current_offset.SetPitch ( multiplyer * transform_stamped.transform.translation.y );
+              current_offset.SetRoll ( multiplier * transform_stamped.transform.translation.x );
+              current_offset.SetPitch ( multiplier * transform_stamped.transform.translation.y );
 
               if ( front_camera == true && abs ( yaw ) < abs ( PI/2 + epsilon ) )
                 {
-                  cout << "Front camera" << endl;
-                  current_offset.SetRoll ( - multiplyer * transform_stamped.transform.translation.y );
-                  current_offset.SetPitch ( multiplyer * transform_stamped.transform.translation.x );
+                  current_offset.SetRoll ( - multiplier * transform_stamped.transform.translation.y );
+                  current_offset.SetPitch ( multiplier * transform_stamped.transform.translation.x );
                 }
               current_offset.SetGaz ( -abs ( transform_stamped.transform.translation.z ) );
               current_offset.SetYaw ( ( ( float ) yaw * 180 / PI ) );
@@ -330,9 +307,9 @@ int main ( int argc, char **argv )
 
       // NOTE: if the distance on X and Y is higher than a threshold, when using front camera just translate keeping the marker at the centre of the camera's frame!
       //cout << "Value of frontcam: " << front_camera << " and looking good: "<< looking_good << endl;
-      if ( front_camera == true && looking_good == false )
+      if ( front_camera == true /*&& looking_good == false */)
         {
-          ROS_WARN ( "Drone reversed! Keep camera fixed!!" );
+          //ROS_WARN ( "Drone reversed! Keep camera fixed!!" );
           //cout << "Actual orientation: " << yaw_frontcam << " rad, "<< yaw_frontcam * 180 / PI << " degrees" << endl;
           //cout << current_offset.GetRoll() << " " << current_offset.GetPitch() << endl;
           if ( abs(current_offset.GetRoll()) > target_x || abs(current_offset.GetPitch()) > target_y)
@@ -348,43 +325,42 @@ int main ( int argc, char **argv )
                 }
               else current_offset.SetYaw ( 0 );
             }
+
+          if( looking_good == false)
+            {
+              was_reverse = true;
+            }
+
         }
 
       // FIXME: if the drone previously lost the transform but then identified the marker using the bottomcamera, first find the right orientation and then approach it
-      if( front_camera == false && initialization_after_tf_lost == true )
+      if( front_camera == false && initialization_after_tf_lost == true && marker_detected)
         {
-
-          if( current_offset.GetYaw() * 180 / PI < -5 || current_offset.GetYaw() * 180 / PI > 5)
+          // check the yaw (expressed in degrees) and rotate until right orientations is reached
+          if( current_offset.GetYaw() < -5 || current_offset.GetYaw() > 5)
             {
+              //cout <<"Yaw: "<< current_offset.GetYaw() << endl;
               ROS_WARN( " TF found with bottomcamera! First rotate and then approach!!" );
               if ( current_offset.GetRoll() > target_x )
                 {
-                  cout << "Branch 1" << endl;
+                  //cout << "Branch 1" << endl;
                   current_offset.SetRoll( 0 );
                 }
 
               if ( current_offset.GetPitch() > target_y)
                 {
-                  cout << "Branch 2" << endl;
+                  //cout << "Branch 2" << endl;
                   current_offset.SetPitch( 0 );
                 }
             }
           else
             {
-              initialization_after_tf_lost = false;
+              //initialization_after_tf_lost = false;
               tf_lost_compensatory = true;
-              ROS_WARN( " Initialization var set to false" );
+              cout << "TF compensatory set!!" << endl;
             }
         }
 
-      /*
-      // when drone finds the marker AFTER having lost it, move toward it without changing orientation
-      if (initialization_after_tf_lost && (abs(current_offset.GetRoll()) > target_x || abs(current_offset.GetPitch()) > target_y))
-        {
-          current_offset.SetYaw( 0 );
-          //cout << "alive" << endl;
-        }
-      */
 
       // Create a copy of the current_offset to evaluate the compensatory factor
       compensatory_offset.SetOffset ( current_offset );
@@ -408,6 +384,7 @@ int main ( int argc, char **argv )
       else
         {
           int current_time_sec = ( int ) ros::Time::now().toSec();
+
           // Marker has been reached, land safely
           if ( move_by_rel.data.compare ( "c moveByRel 0 0 0 0" ) == 0 )
             {
@@ -424,7 +401,7 @@ int main ( int argc, char **argv )
             {
               cmd_pub.publish<> ( clear );
               // Initialize the controller just before the flight
-              if ( count == 1  /*|| initialization_after_tf_lost == true*/)
+              if ( count == 1 )
                 {
                   ROS_INFO ( "Initialization" );
                   cmd_pub.publish<> ( auto_init );
@@ -433,8 +410,6 @@ int main ( int argc, char **argv )
                   cmd_pub.publish<> ( initial_reach_dist );
                   cmd_pub.publish<> ( stay_within_dist );
                   cmd_pub.publish<> ( stay_time );
-                  // cmd_pub.publish<> ( takeoff );
-                  //initialization_after_tf_lost = false;
                 }
               else
                 {
@@ -444,28 +419,27 @@ int main ( int argc, char **argv )
                   // 2 -> pitch
                   // 3 -> gaz
                   // k_roll = getCompensatoryFactor ( compensatory_offset.GetRoll(), last_view_offset.GetRoll(), count, x_axis_crossed, target_x, 1 );
-                  //k_pitch = getCompensatoryFactor ( compensatory_offset.GetPitch(), last_view_offset.GetPitch(), count, y_axis_crossed, target_y, 2 );
+                  // k_pitch = getCompensatoryFactor ( compensatory_offset.GetPitch(), last_view_offset.GetPitch(), count, y_axis_crossed, target_y, 2 );
                   // k_gaz = getCompensatoryFactor ( compensatory_offset.GetGaz(), last_view_offset.GetGaz(), count,
                   //                                z_axis_crossed, target_z, 3 );
 
                   // Update the navigation command
-
                   move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( k_roll * current_offset.GetRoll() ) +
                       " " + boost::lexical_cast<std::string> ( k_pitch * current_offset.GetPitch() ) + " " +
                       boost::lexical_cast<std::string> ( k_gaz * current_offset.GetGaz() ) + " " +
                       boost::lexical_cast<std::string> ( current_offset.GetYaw() );
                   if ( marker_detected == true )
                     {
+                      cmd_pub.publish( clear );
                       cmd_pub.publish<> ( move_by_rel );
                       cout << move_by_rel.data << endl;
                     }
 
                   marker_detected = false;
+
                   // Update the last offset
                   last_view_offset.SetOffset ( compensatory_offset );
                 }
-
-              //cout  << "Frontal camera: " << front_camera << endl;
 
               cout << endl;
               lost_count = 0;
@@ -480,56 +454,54 @@ int main ( int argc, char **argv )
               // NOTE: the switch made by callback happens at a different frequency; therefore this one is required as soon as we lose eye contact with the marker
 
               ros::service::call<> ( "/ardrone/togglecam", req, res );
-              ROS_WARN ( "Camera changed" );
-              if ( front_camera == false )
-                {
-                  ROS_INFO ( "Bottom camera activated!" );
-                }
-              else
-                {
-                  ROS_INFO ( "Frontal camera activated" );
-                }
               front_camera = !front_camera;
 
-              cmd_pub.publish<> ( clear );
-
+              cmd_pub.publish( clear );
 
               if ( count > 1 )
                 {
 
                   k_roll = k_pitch = k_gaz = 1.0;
-                  // Redirect the drone towards the last position in which the drone was
-                  // seen
-                  // FIXME: Check the logic of this code - when the drone lose the marker after being reversed, the command shoule be fixed
-                  /*if ( initialization_after_tf_lost )
+                  // Redirect the drone towards the last position in which the drone was seen
+                  if ( was_reverse == true || initialization_after_tf_lost == false )
                     {
-                      move_by_rel.data = " c moveByRel 0 0 0.5 30";
-                      cout << "alive" << endl;
-                      //tf_lost = false;
-                    }
-                  else*/ if ( was_reverse == true && initialization_after_tf_lost == false )
-                    {
+
+
+                      cout << "Value of was_reverse: " << was_reverse << endl;
+                      cout << "value of initialization_after_tf_lost: "<< initialization_after_tf_lost << endl;
+
+                      if (tf_lost_compensatory == true || ( was_reverse == true && initialization_after_tf_lost == true ))
+                        {
+                          ROS_WARN(" CRITICAL PHASE 1 !!");
+                          multiplier = -1;
+                          last_view_offset.SetYaw( 0 );
+                          critical_phase = true;
+                        }
+
                       ROS_WARN("Marker lost while reversed");
-                      move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( k_roll * last_view_offset.GetRoll() ) + " "+
-                          boost::lexical_cast<std::string> ( k_pitch * last_view_offset.GetPitch() ) + " " +
+                      move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( multiplier * k_roll * last_view_offset.GetRoll() ) + " "+
+                          boost::lexical_cast<std::string> ( multiplier * k_pitch * last_view_offset.GetPitch() ) + " " +
                           boost::lexical_cast<std::string> ( k_gaz * target_z * lost_count ) + " " +
                           boost::lexical_cast<std::string> ( 0 );
                     }
                   else
                     {
-                      //FIXME: this code doesn't work after tf is lost
+
+
                       if (tf_lost_compensatory == true)
                         {
-                          ROS_WARN(" CRITICAL PHASE!!");
-                          multiplyer = -1;
-                          //last_view_offset.SetYaw( 0 );
+                          ROS_WARN(" CRITICAL PHASE 2 !!");
+                          //multiplier = -1;
+                          last_view_offset.SetYaw( 0 );
                         }
 
-                      move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( multiplyer * k_roll * last_view_offset.GetRoll() ) + " "+
-                          boost::lexical_cast<std::string> ( multiplyer * k_pitch * last_view_offset.GetPitch() ) + " " +
+
+                      move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( multiplier * k_roll * last_view_offset.GetRoll() ) + " "+
+                          boost::lexical_cast<std::string> ( multiplier * k_pitch * last_view_offset.GetPitch() ) + " " +
                           boost::lexical_cast<std::string> ( k_gaz * target_z * lost_count ) + " " +
                           boost::lexical_cast<std::string> ( last_view_offset.GetYaw() );
                     }
+                  marker_was_lost = true;
                   cmd_pub.publish<> ( move_by_rel );
                   cout << move_by_rel.data << endl;
                   cout << endl;
@@ -541,6 +513,7 @@ int main ( int argc, char **argv )
 
       bool x_axis_crossed = false;
       bool y_axis_crossed = false;
+      multiplier = 1;
       bool z_axis_crossed = false;
       count++;
       rate.sleep();
