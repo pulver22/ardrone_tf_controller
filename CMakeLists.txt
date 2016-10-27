@@ -32,13 +32,13 @@ add_library(offset src/offset.cpp )
 add_executable(ardrone_tf_controller src/ardrone_tf_controller.cpp)
 add_executable(frontcamera_autopilot src/frontcamera_autopilot.cpp)
 add_executable(bottomcamera_autopilot src/bottomcamera_autopilot.cpp)
+add_executable(coop_controller src/coop_controller.cpp)
+
 
 target_link_libraries(ardrone_tf_controller
-		${catkin_LIBRARIES}
-		offset
+   ${catkin_LIBRARIES}
+   offset
 )
-
-
 
 target_link_libraries(frontcamera_autopilot 
    ${catkin_LIBRARIES}
@@ -50,6 +50,12 @@ target_link_libraries(bottomcamera_autopilot
    ${catkin_LIBRARIES}
    offset
 )
+
+target_link_libraries(coop_controller
+   ${catkin_LIBRARIES}
+   offset
+)
+
 
 
 list( APPEND CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS} -O3 -g  -ftest-coverage -fprofile-arcs")
