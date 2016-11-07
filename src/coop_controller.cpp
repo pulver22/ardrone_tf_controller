@@ -138,7 +138,6 @@ int main ( int argc, char **argv )
   float k_roll, k_pitch, k_gaz;
 
   tfScalar roll, pitch, yaw;
-  tfScalar roll_frontcam, pitch_frontcam, yaw_frontcam;
 
   // Parameters for identifing when the drone reaches the target
   float target_x, target_y, target_z, target_yaw;
@@ -180,12 +179,19 @@ int main ( int argc, char **argv )
   while ( nh.ok() )
     {
       // Get transform from the drone and the frontcamera
-      geometry_msgs::TransformStamped transform_stamped, transform_stamped_frontcam;
+      geometry_msgs::TransformStamped transform_stamped;
       try
       {
         //FIXME: Correct with the right frames
-        transform_stamped = tf_buffer.lookupTransform ( "ar_marker", "uav1/ardrone_base_frontcam", ros::Time ( 0 ) );
-        transform_stamped_frontcam = tf_buffer.lookupTransform ( "ar_marker", "uav1/ardrone_base_frontcam", ros::Time ( 0 ) );
+        if ( front_camera == true)
+          {
+            transform_stamped = tf_buffer.lookupTransform ( "ar_marker", "ardrone_base_frontcam", ros::Time ( 0 ) );
+          } else
+          {
+            transform_stamped = tf_buffer.lookupTransform ( "ar_marker", "ardrone_base_bottomcam", ros::Time ( 0 ) );
+          }
+
+
       }
       catch ( tf2::TransformException &ex )
       {
@@ -195,7 +201,7 @@ int main ( int argc, char **argv )
         // NOTE: in these two second no perceptions are done!
         if ( count > 1 )
           {
-            ros::service::call<> ( "/ardrone/togglecam", req, res );
+            ros::service::call<> ( "/uav1/togglecam", req, res );
             // call the camera callback
             camera_queue.callAvailable ( ros::WallDuration() );
             front_camera = !front_camera;
@@ -243,11 +249,6 @@ int main ( int argc, char **argv )
       tf::Matrix3x3 m ( q );
       m.getRPY ( roll, pitch, yaw );
 
-      // Get transformation between marker and frontalcamera
-      tf::Quaternion q_frontcam ( transform_stamped_frontcam.transform.rotation.x, transform_stamped_frontcam.transform.rotation.y,
-                                  transform_stamped_frontcam.transform.rotation.z, transform_stamped_frontcam.transform.rotation.w );
-      tf::Matrix3x3 m_frontcam ( q_frontcam );
-      m_frontcam.getRPY ( roll_frontcam, pitch_frontcam, yaw_frontcam );
 
 
       if ( marker_detected == true )
@@ -267,7 +268,7 @@ int main ( int argc, char **argv )
               if ( ( was_reverse == true && initialization_after_tf_lost == false) || critical_phase == true )
                 {
                   ROS_WARN ( "Reversed! --> Changing multiplier" );
-                  multiplier = -1;
+                  //multiplier = -1;
                 }
               current_offset.SetRoll ( -multiplier * transform_stamped.transform.translation.x );
               current_offset.SetPitch ( -multiplier * transform_stamped.transform.translation.y );
@@ -392,7 +393,7 @@ int main ( int argc, char **argv )
               ROS_INFO ( "Destination reached" );
               cmd_pub.publish<> ( land );
               //after landing switch camera to the front one, to facilitate the takeoff
-              ros::service::call<> ( "/ardrone/togglecam", req, res );
+              ros::service::call<> ( "/uav1/togglecam", req, res );
               initialization_after_tf_lost = false;
               ros::shutdown();
             }
@@ -454,7 +455,7 @@ int main ( int argc, char **argv )
               // Switch to the other camera when the marker is lost by the current one
               // NOTE: the switch made by callback happens at a different frequency; therefore this one is required as soon as we lose eye contact with the marker
 
-              ros::service::call<> ( "/ardrone/togglecam", req, res );
+              ros::service::call<> ( "/uav1/togglecam", req, res );
               front_camera = !front_camera;
 
               cmd_pub.publish( clear );
