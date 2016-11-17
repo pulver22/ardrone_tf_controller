@@ -20,7 +20,6 @@
 #include <ros/callback_queue.h>
 
 int last_msg = 0;
-const double PI = 3.141593;
 unsigned int ros_header_timestamp_base = 0;
 bool marker_detected = false;
 double camera_alignment_x;
