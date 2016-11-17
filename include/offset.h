@@ -1,12 +1,6 @@
 #ifndef OFFSET_H
 #define OFFSET_H
 
-#include <tf2_ros/transform_listener.h>
-#include <tf/LinearMath/Matrix3x3.h>
-
-const double PI = 3.141593;
-
-
 class Offset
 {
 public:
@@ -23,10 +17,6 @@ public:
   void SetYaw(double yaw);
   void SetOffset(Offset offset);
   void ReduceOffsetToZero(Offset &offset, double target_X, double target_Y, double target_Z, double target_yaw);
-  void FromTfToOffset(Offset *offset, geometry_msgs::TransformStamped tf, tfScalar yaw, float epsilon, bool front_camera, int multiplier, bool was_reverse, bool initialization_after_tf_lost, bool critical_phase, int branch);
-  void CentreUAV(Offset *offset, float target_x, float target_y);
-  void CentreFOV(Offset *offset, float target_x, float target_y, double camera_alignment_x);
-  void RotateOnly(Offset *offset, float target_x, float target_y, bool *tf_lost_compensatory);
 
 protected:
   double roll_;

@@ -1,8 +1,3 @@
-#include <unordered_map>
-#include <utility>
-
-#include <boost/lexical_cast.hpp>
-
 #include "ros/ros.h"
 #include "ros/package.h"
 #include <ros/node_handle.h>
@@ -10,38 +5,30 @@
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/Vector3.h>
 #include <geometry_msgs/Twist.h>
+#include "std_msgs/String.h"
+#include <ar_pose/ARMarker.h>
 #include <tf2/transform_datatypes.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf/LinearMath/Matrix3x3.h>
+#include <boost/lexical_cast.hpp>
 #include "sensor_msgs/ChannelFloat32.h"
-#include "std_msgs/String.h"
 #include "std_msgs/Float32.h"
+#include "../include/offset.h"
 #include <std_srvs/Empty.h>
 #include <ros/service_client.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <ros/callback_queue.h>
-#include <nav_msgs/Odometry.h>
-
-#include <ar_pose/ARMarker.h>
-
-#include "../include/utilities.h"
-#include "../include/offset.h"
 
 int last_msg = 0;
+const double PI = 3.141593;
 unsigned int ros_header_timestamp_base = 0;
 bool marker_detected = false;
 double camera_alignment_x;
 //Record with camera is in use (true(1)=frontcam, false(0)=bottomcam); default = true;
 bool front_camera = true;
-//define a hash table to countain the timestamp (key) and position and orientation of the mobile robot
-std::unordered_map<int, std::string> ts_map;
-
-
 using namespace std;
 
 float getCompensatoryFactor ( double current_offset, double last_offset, int count, bool &axisCrossed, double target, int type );
-string MarkerLost(int *lost_count, int *count, int k_roll, int k_pitch, int k_gaz, bool *was_reverse, bool *initialization_after_tf_lost, bool *tf_lost_compensatory, int *multiplier, Offset *last_view_offset, bool *critical_phase, float target_x, float target_y, float target_z, bool *marker_was_lost);
-
 // Save the timestamp of the last time the marker has been seen
 void markerCallback ( const ar_pose::ARMarker::ConstPtr msg )
 {
@@ -49,9 +36,25 @@ void markerCallback ( const ar_pose::ARMarker::ConstPtr msg )
   last_msg = msg->header.stamp.sec;
   marker_detected = true;
   camera_alignment_x = msg-> pose.pose.position.x;
+  //cout << "Align X: "<< msg-> pose.pose.position.x << endl;
+  //cout << "Align Y: "<< msg-> pose.pose.position.y << endl;
+  //cout << "Align Z: "<< msg-> pose.pose.position.z << endl;
+
+  /*
+  // Get rotation expressed in quaternion, transform it in a rotation matrix
+  // and then retrieve roll pitch and yaw
+  tf::Quaternion q ( msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w );
+  tf::Matrix3x3 m ( q );
+  tfScalar tmp_roll, tmp_pitch, tmp_yaw;
+  m.getRPY ( tmp_roll, tmp_pitch, tmp_yaw );
+  align_yaw = tmp_yaw;
+  cout << " tmp_roll: " << tmp_roll << endl;
+  cout << " tmp_pitch: " << tmp_pitch << endl;
+  cout << " tmp_yaw: " << tmp_yaw << endl;
+  */
 }
 
-// Set if UAV is using fron or down camera
+// BUG: camera's frame id wrong; bottomcam corresponds to the frontcam'stream
 void cameraCallback ( const sensor_msgs::CameraInfo msg )
 {
   if ( msg.header.frame_id.compare ( "ardrone_base_bottomcam" ) == 0 )
@@ -67,34 +70,6 @@ void cameraCallback ( const sensor_msgs::CameraInfo msg )
   else ROS_ERROR ( "Camera not identified!" );
 }
 
-// Insert mobile robot position and orientation in the has table
-void ekfCallback( const nav_msgs::Odometry msg)
-  {
-  uint32_t tmp_ts;
-  geometry_msgs::Point tmp_position;
-  tfScalar tmp_roll, tmp_pitch, tmp_yaw;
-  std::string encoding;
-
-  // Save the timestamp
-  tmp_ts = msg.header.stamp.sec;
-
-  //Save the position of the mobile robot
-  tmp_position.x = msg.pose.pose.position.x;
-  tmp_position.y = msg.pose.pose.position.y;
-  tmp_position.z = msg.pose.pose.position.z;
-
-  // Save the mobile robot's orientation
-  tf::Quaternion tmp_q( msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w);
-  tf::Matrix3x3 tmp_m ( tmp_q );
-  tmp_m.getRPY(tmp_roll, tmp_pitch, tmp_yaw);
-
-
-  // Get the encoding of the pose and add it with the ts in a unordered_map (key + value)
-  Utilities utility;
-  encoding = utility.getEncoding(tmp_position,(tfScalar)tmp_yaw);
-  std::pair<uint32_t,std::string> pair(tmp_ts, encoding);
-  ts_map.insert(pair);
-}
 
 int main ( int argc, char **argv )
 {
@@ -103,8 +78,6 @@ int main ( int argc, char **argv )
   ros::NodeHandle nh;
   // create a second node handler only for the camera switch
   ros::NodeHandle nh_camera;
-  //create a node handler for the husky
-  ros::NodeHandle nh_husky;
   ros::CallbackQueue camera_queue;
   nh_camera.setCallbackQueue ( &camera_queue );
 
@@ -119,11 +92,8 @@ int main ( int argc, char **argv )
 
   ros::Subscriber marker_sub = nh.subscribe ( "/ar_pose_marker", 1, markerCallback );
   ros::Subscriber camera_sub = nh_camera.subscribe ( "/camera/camera_info",1, cameraCallback );
-  ros::Subscriber ekf_sub = nh_husky.subscribe ( "/husky/odometry/filtered",1, ekfCallback);
-
   ros::Publisher linear_offset_pub = nh.advertise<geometry_msgs::Vector3> ( "/linear_offset", 100 );
   ros::Publisher rotational_offset_pub = nh.advertise<std_msgs::Float32> ( "/rotation_offset", 100 );
-
   //Service client for change the camera feedback
   ros::ServiceClient client = nh.serviceClient<std_srvs::Empty> ( "/uav1/togglecam" );
   geometry_msgs::Vector3 offset_msg;
@@ -192,7 +162,6 @@ int main ( int argc, char **argv )
   bool marker_was_lost = false;
   bool critical_phase = false;
 
-  int branch = 0;
   int multiplier = 1;
 
   // Request and Response for changing camera service
@@ -213,6 +182,7 @@ int main ( int argc, char **argv )
       geometry_msgs::TransformStamped transform_stamped;
       try
       {
+        //FIXME: Correct with the right frames
         if ( front_camera == true)
           {
             transform_stamped = tf_buffer.lookupTransform ( "ar_marker", "ardrone_base_frontcam", ros::Time ( 0 ) );
@@ -220,10 +190,12 @@ int main ( int argc, char **argv )
           {
             transform_stamped = tf_buffer.lookupTransform ( "ar_marker", "ardrone_base_bottomcam", ros::Time ( 0 ) );
           }
+
+
       }
       catch ( tf2::TransformException &ex )
       {
-        //ROS_WARN ( "%s", ex.what() );
+        ROS_WARN ( "%s", ex.what() );
 
         // if marker is not detected, call the service and switch the camera; then move upward and wait two seconds
         // NOTE: in these two second no perceptions are done!
@@ -232,18 +204,14 @@ int main ( int argc, char **argv )
             ros::service::call<> ( "/uav1/togglecam", req, res );
             // call the camera callback
             camera_queue.callAvailable ( ros::WallDuration() );
-            //cout << front_camera << endl;
             front_camera = !front_camera;
-            //cout << front_camera << endl;
-            // Move the drone upward only if the drone has not been lost, in that case follow the last perception
-            if(marker_was_lost == false){
-                cmd_pub.publish<> ( clear );
-                // Move the drone upward to increment current camera's FOV and rotate
-                // NOTE: I had to remove rotations because it introduces issue among frames when sending commands
-                move_by_rel.data = "c moveByRel 0 0 0.5 0";
-                cmd_pub.publish<> ( move_by_rel );
-                cout << move_by_rel.data << endl << endl;
-              }
+
+            cmd_pub.publish<> ( clear );
+            // Move the drone upward to increment current camera's FOV and rotate
+            // NOTE: I had to remove rotations because it introduces issue among frames when sending commands
+            move_by_rel.data = "c moveByRel 0 0 0.5 0";
+            cmd_pub.publish<> ( move_by_rel );
+            cout << move_by_rel.data << endl << endl;
             tf_lost = true;
             was_reverse = true;
             looking_good = false;
@@ -253,22 +221,23 @@ int main ( int argc, char **argv )
         continue;
       }
 
+      // FIXME: after rotating to find the marker, the drone should stop, acquire the transform from its current position and move towards it; otherwise it will lose it
       if( tf_lost )
         {
-          cout << "TF was LOST" << endl;
+          cout << "TF was LOST" << endl << endl;
           //ros::Duration ( 1.0 ).sleep();
-          /*cmd_pub.publish(clear);
+          cmd_pub.publish(clear);
           move_by_rel.data = "c moveByRel 0 0 0 0";
           cmd_pub.publish( move_by_rel );
 
-          ROS_INFO ( "Initialization 2" );
+          ROS_INFO ( "Initialization" );
           cmd_pub.publish<> ( auto_init );
           cmd_pub.publish<> ( reference );
           cmd_pub.publish<> ( max_control );
           cmd_pub.publish<> ( initial_reach_dist );
           cmd_pub.publish<> ( stay_within_dist );
           cmd_pub.publish<> ( stay_time );
-          */
+
           tf_lost = false;
           initialization_after_tf_lost = true;
         }
@@ -288,27 +257,45 @@ int main ( int argc, char **argv )
           if ( ( ( yaw > -epsilon ) && ( yaw < epsilon ) && front_camera == true ) || ( ( abs ( yaw ) < ( PI/2 ) ) && front_camera == false ) )
             {
               cout << "Branch 1: drone loooking good" << endl;
-              branch = 1;
 
-              current_offset.FromTfToOffset(&current_offset, transform_stamped, yaw, epsilon, front_camera, multiplier, was_reverse, initialization_after_tf_lost, critical_phase, branch);
+              /*
+              cout << "was_reversed: " << was_reverse << endl;
+              cout << "marker_was_lost: " << marker_was_lost << endl;
+              cout << "initialization_after_tf_lost: " << initialization_after_tf_lost << endl;
+              cout << "tf_lost_compensatory: " << tf_lost_compensatory << endl;
+              */
+
+              if ( ( was_reverse == true && initialization_after_tf_lost == false) || critical_phase == true )
+                {
+                  ROS_WARN ( "Reversed! --> Changing multiplier" );
+                  //multiplier = -1;
+                }
+              current_offset.SetRoll ( -multiplier * transform_stamped.transform.translation.x );
+              current_offset.SetPitch ( -multiplier * transform_stamped.transform.translation.y );
+              current_offset.SetGaz ( -abs ( transform_stamped.transform.translation.z ) );
+              current_offset.SetYaw ( ( float ) yaw * 180 / PI );
+
               looking_good = true;
             }
           else
             {
               cout << "Branch 2: drone has to align" << endl;
-              branch = 2;
+              //multiplier = 1;
 
-              current_offset.FromTfToOffset(&current_offset, transform_stamped, yaw, epsilon, front_camera, multiplier, was_reverse, initialization_after_tf_lost, critical_phase, branch);
+              current_offset.SetRoll ( multiplier * transform_stamped.transform.translation.x );
+              current_offset.SetPitch ( multiplier * transform_stamped.transform.translation.y );
+
+              if ( front_camera == true && abs ( yaw ) < abs ( PI/2 + epsilon ) )
+                {
+                  current_offset.SetRoll ( - multiplier * transform_stamped.transform.translation.y );
+                  current_offset.SetPitch ( multiplier * transform_stamped.transform.translation.x );
+                }
+              current_offset.SetGaz ( -abs ( transform_stamped.transform.translation.z ) );
+              current_offset.SetYaw ( ( ( float ) yaw * 180 / PI ) );
               was_reverse = true;
               looking_good = false;
             }
-
-          // Increase the offsets to center the UAV and prevent it's not able to track the moving marker
-          current_offset.CentreUAV(&current_offset, target_x, target_y);
-
-
         }
-
 
 
       // Publish the offsets ----------------
@@ -321,19 +308,59 @@ int main ( int argc, char **argv )
       // ------------------------------------
 
       // NOTE: if the distance on X and Y is higher than a threshold, when using front camera just translate keeping the marker at the centre of the camera's frame!
+      //cout << "Value of frontcam: " << front_camera << " and looking good: "<< looking_good << endl;
       if ( front_camera == true /*&& looking_good == false */)
         {
-          current_offset.CentreFOV(&current_offset,target_x, target_y, camera_alignment_x);
+          //ROS_WARN ( "Drone reversed! Keep camera fixed!!" );
+          //cout << "Actual orientation: " << yaw_frontcam << " rad, "<< yaw_frontcam * 180 / PI << " degrees" << endl;
+          //cout << current_offset.GetRoll() << " " << current_offset.GetPitch() << endl;
+          if ( abs(current_offset.GetRoll()) > target_x || abs(current_offset.GetPitch()) > target_y)
+            {
+              //cout << camera_alignment_x << endl;
+              if ( camera_alignment_x > 0.4 )
+                {
+                  current_offset.SetYaw ( 10 );
+                }
+              else if ( camera_alignment_x < -0.4 )
+                {
+                  current_offset.SetYaw ( -10 );
+                }
+              else current_offset.SetYaw ( 0 );
+            }
 
-          if( looking_good == false)  was_reverse = true;
+          if( looking_good == false)
+            {
+              was_reverse = true;
+            }
 
         }
 
-      // NOTE: if the drone previously lost the transform but then identified the marker using the bottomcamera, first find the right orientation and then approach it
+      // FIXME: if the drone previously lost the transform but then identified the marker using the bottomcamera, first find the right orientation and then approach it
       if( front_camera == false && initialization_after_tf_lost == true && marker_detected)
         {
           // check the yaw (expressed in degrees) and rotate until right orientations is reached
-          current_offset.RotateOnly(&current_offset, target_x, target_y, &tf_lost_compensatory);
+          if( current_offset.GetYaw() < -5 || current_offset.GetYaw() > 5)
+            {
+              //cout <<"Yaw: "<< current_offset.GetYaw() << endl;
+              ROS_WARN( " TF found with bottomcamera! First rotate and then approach!!" );
+              if ( current_offset.GetRoll() > target_x )
+                {
+                  //cout << "Branch 1" << endl;
+                  current_offset.SetRoll( 0 );
+                }
+
+              if ( current_offset.GetPitch() > target_y)
+                {
+                  //cout << "Branch 2" << endl;
+                  current_offset.SetPitch( 0 );
+                }
+            }
+          else
+            {
+              //initialization_after_tf_lost = false;
+              tf_lost_compensatory = true;
+              cout << "TF compensatory set!!" << endl;
+            }
         }
 
 
@@ -371,14 +398,14 @@ int main ( int argc, char **argv )
               ros::shutdown();
             }
 
-          // NOTE: Test this time-depending comparison - maybe it's a good idea to give 3 seconds for network issue
+          // FIXME: Test this time-depending comparison - maybe it's a good idea to give 3 seconds for network issue
           if ( current_time_sec <= ( last_msg + 2 ) )
             {
               cmd_pub.publish<> ( clear );
               // Initialize the controller just before the flight
               if ( count == 1 )
                 {
-                  ROS_INFO ( "First Initialization" );
+                  ROS_INFO ( "Initialization" );
                   cmd_pub.publish<> ( auto_init );
                   cmd_pub.publish<> ( reference );
                   cmd_pub.publish<> ( max_control );
@@ -411,10 +438,12 @@ int main ( int argc, char **argv )
                     }
 
                   marker_detected = false;
-                  marker_was_lost = false;
+
                   // Update the last offset
                   last_view_offset.SetOffset ( compensatory_offset );
                 }
+
+              cout << endl;
               lost_count = 0;
             }
           else
@@ -426,41 +455,71 @@ int main ( int argc, char **argv )
               // Switch to the other camera when the marker is lost by the current one
               // NOTE: the switch made by callback happens at a different frequency; therefore this one is required as soon as we lose eye contact with the marker
 
-              // NOTE: The switch is realised when marker is lost (down in the code),remove it here otherwise two changes disable each other effect
-              // FIXME: where down in the code?
-              //ros::service::call<> ( "/uav1/togglecam", req, res );
-              //cout << front_camera << endl;
-              //front_camera = !front_camera;
-              //cout << front_camera << endl;
-              //cmd_pub.publish( clear );
+              ros::service::call<> ( "/uav1/togglecam", req, res );
+              front_camera = !front_camera;
 
-              move_by_rel.data = MarkerLost(&lost_count, &count, k_roll, k_pitch, k_gaz, &was_reverse, &initialization_after_tf_lost, &tf_lost_compensatory, &multiplier, &last_view_offset, &critical_phase, target_x, target_y, target_z, &marker_was_lost);;
-              cmd_pub.publish<> ( move_by_rel );
-              cout << move_by_rel.data << endl;
+              cmd_pub.publish( clear );
 
+              if ( count > 1 )
+                {
+
+                  k_roll = k_pitch = k_gaz = 1.0;
+                  // Redirect the drone towards the last position in which the drone was seen
+                  if ( was_reverse == true || initialization_after_tf_lost == false )
+                    {
+
+
+                      cout << "Value of was_reverse: " << was_reverse << endl;
+                      cout << "value of initialization_after_tf_lost: "<< initialization_after_tf_lost << endl;
+
+                      if (tf_lost_compensatory == true || ( was_reverse == true && initialization_after_tf_lost == true ))
+                        {
+                          ROS_WARN(" CRITICAL PHASE 1 !!");
+                          multiplier = -1;
+                          last_view_offset.SetYaw( 0 );
+                          critical_phase = true;
+                        }
+
+                      ROS_WARN("Marker lost while reversed");
+                      move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( multiplier * k_roll * last_view_offset.GetRoll() ) + " "+
+                          boost::lexical_cast<std::string> ( multiplier * k_pitch * last_view_offset.GetPitch() ) + " " +
+                          boost::lexical_cast<std::string> ( k_gaz * target_z * lost_count ) + " " +
+                          boost::lexical_cast<std::string> ( 0 );
+                    }
+                  else
+                    {
+
+
+                      if (tf_lost_compensatory == true)
+                        {
+                          ROS_WARN(" CRITICAL PHASE 2 !!");
+                          //multiplier = -1;
+                          last_view_offset.SetYaw( 0 );
+                        }
+
+
+                      move_by_rel.data = "c moveByRel " + boost::lexical_cast<std::string> ( multiplier * k_roll * last_view_offset.GetRoll() ) + " "+
+                          boost::lexical_cast<std::string> ( multiplier * k_pitch * last_view_offset.GetPitch() ) + " " +
+                          boost::lexical_cast<std::string> ( k_gaz * target_z * lost_count ) + " " +
+                          boost::lexical_cast<std::string> ( last_view_offset.GetYaw() );
+                    }
+                  marker_was_lost = true;
+                  cmd_pub.publish<> ( move_by_rel );
+                  cout << move_by_rel.data << endl;
+                  cout << endl;
+                }
             }
 
         }
 
 
-      /*
-      cout << "Number of entries: " << ts_map.size() << endl;
-      for(auto it = ts_map.begin(); it != ts_map.end(); it++)
-        {
-          cout << it->first << " " << it->second << endl;
-        }
-        */
-      cout << "--------------------------" << endl;
-
-
-      x_axis_crossed = false;
-      y_axis_crossed = false;
-      z_axis_crossed = false;
+      bool x_axis_crossed = false;
+      bool y_axis_crossed = false;
       multiplier = 1;
+      bool z_axis_crossed = false;
       count++;
-
-      ros::spinOnce();
       rate.sleep();
+      ros::spinOnce();
     }
 
   return 0;
@@ -514,63 +573,10 @@ float getCompensatoryFactor ( double current_offset, double last_offset, int cou
           ROS_WARN ( "Virtual Z axis crossed" );
           break;
         }
-      // NOTE: tmpCompensatoryFactor decreases as linear function
+      // FIXME: Modify tmpCompensatoryFactor to decrease as linear function
       tmp_compensatory_factor = max ( 1.0, angular_coefficient * ( abs ( current_offset ) - abs ( target ) ) + ordinata );
     }
 
   //cout << "Inside function: " << type << " : " << tmp_compensatory_factor << endl;
   return tmp_compensatory_factor;
-}
-
-
-string MarkerLost(int *lost_count, int *count, int k_roll, int k_pitch, int k_gaz, bool *was_reverse, bool *initialization_after_tf_lost, bool *tf_lost_compensatory, int *multiplier, Offset *last_view_offset, bool *critical_phase, float target_x, float target_y, float target_z, bool *marker_was_lost)
-{
-  std::string control_cmd;
-
-  if ( *count > 1 )
-    {
-
-      k_roll = k_pitch = k_gaz = 1.0;
-      // Redirect the drone towards the last position in which the drone was seen
-      if ( *was_reverse == true && *initialization_after_tf_lost == false )
-        {
-
-
-          cout << "Value of was_reverse: " << *was_reverse << endl;
-          cout << "value of initialization_after_tf_lost: "<< *initialization_after_tf_lost << endl;
-          cout << "value of tf_lost_compensatory: " << *tf_lost_compensatory << endl;
-
-          if (*tf_lost_compensatory == true || ( *was_reverse == true && *initialization_after_tf_lost == true ))
-            {
-              ROS_WARN(" CRITICAL PHASE 1 !!");
-              *multiplier = -1;
-              last_view_offset->SetYaw( 0 );
-              *critical_phase = true;
-            }
-
-          ROS_WARN("Marker lost while reversed");
-          control_cmd = "c moveByRel " + boost::lexical_cast<std::string> ( (*multiplier) * k_roll * last_view_offset->GetRoll() + target_x/2 * (*lost_count) ) + " "+
-              boost::lexical_cast<std::string> ( (*multiplier) * k_pitch * last_view_offset->GetPitch() + target_y * (*lost_count) ) + " " +
-              boost::lexical_cast<std::string> ( k_gaz * target_z * (*lost_count) ) + " " +
-              boost::lexical_cast<std::string> ( 0 );
-        }
-      else
-        {
-
-
-          if (*tf_lost_compensatory == true)
-            {
-              ROS_WARN(" CRITICAL PHASE 2 !!");
-              //multiplier = -1;
-              last_view_offset->SetYaw( 0 );
-            }
-
-          control_cmd = "c moveByRel " + boost::lexical_cast<std::string> ( (*multiplier) * k_roll * last_view_offset->GetRoll() + target_x * (*lost_count) ) + " "+
-              boost::lexical_cast<std::string> ( (*multiplier) * k_pitch * last_view_offset->GetPitch() + target_y * (*lost_count)) + " " +
-              boost::lexical_cast<std::string> ( k_gaz * target_z * (*lost_count) ) + " " +
-              boost::lexical_cast<std::string> ( last_view_offset->GetYaw() );
-        }
-      *marker_was_lost = true;
-      return control_cmd;
-    }
 }
