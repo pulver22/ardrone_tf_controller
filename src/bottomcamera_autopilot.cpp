@@ -20,7 +20,6 @@
 
 bool marker_found = true;
 int last_msg = 0;
-const double PI = 3.141593;
 
 using namespace std;
 

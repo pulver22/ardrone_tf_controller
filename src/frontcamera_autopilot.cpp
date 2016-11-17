@@ -16,7 +16,6 @@
 #include "../include/offset.h"
 
 int last_msg = 0;
-const double PI = 3.141593;
 unsigned int ros_header_timestamp_base = 0;
 
 using namespace std;
