@@ -74,6 +74,7 @@ void ekfCallback( const nav_msgs::Odometry msg)
   geometry_msgs::Point tmp_position;
   tfScalar tmp_roll, tmp_pitch, tmp_yaw;
   std::string encoding;
+  Offset tmp_offset;
 
   // Save the timestamp
   tmp_ts = msg.header.stamp.sec;
@@ -91,7 +92,10 @@ void ekfCallback( const nav_msgs::Odometry msg)
 
   // Get the encoding of the pose and add it with the ts in a unordered_map (key + value)
   Utilities utility;
-  encoding = utility.getEncoding(tmp_position,(tfScalar)tmp_yaw);
+  encoding = utility.FromOffsetToEncoding(tmp_position,(tfScalar)tmp_yaw);
+
+  tmp_offset = utility.FromEncodingToOffset(encoding);
+
   std::pair<uint32_t,std::string> pair(tmp_ts, encoding);
   ts_map.insert(pair);
 }

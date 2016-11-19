@@ -6,12 +6,16 @@
 #include <geometry_msgs/Point.h>
 #include <tf/LinearMath/Matrix3x3.h>
 
+#include "../include/offset.h"
+
 class Utilities
 {
 public:
     Utilities();
     ~Utilities();
-    std::string getEncoding (geometry_msgs::Point position, tfScalar yaw);
+    std::string FromOffsetToEncoding (geometry_msgs::Point position, tfScalar yaw);
+    Offset FromEncodingToOffset(std::string encoding);
+
 
 };
 #endif // UTILITIES_H
