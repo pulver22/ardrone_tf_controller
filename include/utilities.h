@@ -13,9 +13,7 @@ class Utilities
 public:
     Utilities();
     ~Utilities();
-    std::string FromOffsetToEncoding (geometry_msgs::Point position, tfScalar yaw);
-    Offset FromEncodingToOffset(std::string encoding);
-
+    Offset UpdateUGVPosition(int current_time_stamp, int old_time_stamp,std::unordered_map<int, std::string> *ts_map);
 
 };
 #endif // UTILITIES_H

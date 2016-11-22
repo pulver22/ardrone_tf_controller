@@ -1,4 +1,5 @@
 #include <string>
+#include <unordered_map>
 
 #include "../include/utilities.h"
 #include <geometry_msgs/Point.h>
@@ -12,39 +13,32 @@ Utilities::~Utilities()
 {
 }
 
-std::string Utilities::FromOffsetToEncoding(geometry_msgs::Point position, tfScalar yaw)
+Offset Utilities::UpdateUGVPosition(int current_time_stamp, int old_time_stamp, std::unordered_map<int, std::string> *ts_map)
 {
-    std::string encoding;
+  // Get actual and old UGV/s position from the hashtable
+  Offset new_offset, new_ugv_position, old_ugv_position;
 
-    encoding = std::to_string(position.x) + "/" + std::to_string(position.y) + "/" + std::to_string(position.z) + "/"  + std::to_string(yaw) ;
+  std::unordered_map<int, std::string>::const_iterator iterator = ts_map->find(current_time_stamp);
+    ROS_WARN("ALIVE");
+    if ( iterator == ts_map->end() )
+        std::cout << "not found";
+      else
+        std::cout << (*iterator).first << " is " << (*iterator).second;
 
-    return encoding;
-}
+  std::string new_ugv_encoder;
+  new_ugv_encoder.assign( iterator->second );
+  std::cout << new_ugv_encoder << std::endl;
+  new_ugv_position.FromEncodingToOffset(new_ugv_encoder);
 
-Offset Utilities::FromEncodingToOffset(std::string encoding)
-{
+  std::string old_ugv_encoder = ( *(ts_map->find(old_time_stamp))).second;
+  std::cout << old_ugv_encoder << std::endl;
+  old_ugv_position.FromEncodingToOffset(old_ugv_encoder);
 
-  //std::cout << encoding << std::endl;
+  new_offset.SetRoll( new_ugv_position.GetRoll() - old_ugv_position.GetRoll() );
+  new_offset.SetPitch( new_ugv_position.GetPitch() - old_ugv_position.GetPitch() );
+  new_offset.SetGaz( new_ugv_position.GetGaz() - old_ugv_position.GetGaz() );
+  new_offset.SetYaw( new_ugv_position.GetYaw() - old_ugv_position.GetYaw() );
 
-  std::string s;
-  Offset offset;
-  char delimiter('/');
-  std::string::size_type pos = encoding.find(delimiter);
-
-  offset.SetRoll(std::stod(encoding.substr(0, pos)));
-
-  s = encoding.substr(pos + 1, encoding.size());
-  pos = s.find(delimiter);
-  offset.SetPitch(std::stod(s.substr(0, pos)));
-
-  s = s.substr(pos + 1, encoding.size());
-  pos = s.find(delimiter);
-  offset.SetGaz(std::stod(s.substr(0, pos)));
-
-  s = s.substr(pos + 1, encoding.size());
-  pos = s.find(delimiter);
-  offset.SetYaw(std::stod(s.substr(0, pos)));
-
-  //std::cout << offset.GetRoll() << " " << offset.GetPitch() << " " << offset.GetGaz() << " " << offset.GetYaw() << std::endl;
+  return new_offset;
 
 }

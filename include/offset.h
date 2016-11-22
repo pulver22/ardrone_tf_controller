@@ -3,6 +3,7 @@
 
 #include <tf2_ros/transform_listener.h>
 #include <tf/LinearMath/Matrix3x3.h>
+#include <geometry_msgs/Point.h>
 
 const double PI = 3.141593;
 
@@ -27,6 +28,8 @@ public:
   void CentreUAV(Offset *offset, float target_x, float target_y);
   void CentreFOV(Offset *offset, float target_x, float target_y, double camera_alignment_x);
   void RotateOnly(Offset *offset, float target_x, float target_y, bool *tf_lost_compensatory);
+  std::string FromOffsetToEncoding (geometry_msgs::Point position, tfScalar yaw);
+  Offset FromEncodingToOffset(std::string encoding);
 
 protected:
   double roll_;

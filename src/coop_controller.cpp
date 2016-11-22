@@ -91,10 +91,9 @@ void ekfCallback( const nav_msgs::Odometry msg)
 
 
   // Get the encoding of the pose and add it with the ts in a unordered_map (key + value)
-  Utilities utility;
-  encoding = utility.FromOffsetToEncoding(tmp_position,(tfScalar)tmp_yaw);
+  encoding = tmp_offset.FromOffsetToEncoding(tmp_position,(tfScalar)tmp_yaw);
 
-  tmp_offset = utility.FromEncodingToOffset(encoding);
+  tmp_offset = tmp_offset.FromEncodingToOffset(encoding);
 
   std::pair<uint32_t,std::string> pair(tmp_ts, encoding);
   ts_map.insert(pair);
@@ -198,6 +197,8 @@ int main ( int argc, char **argv )
 
   int branch = 0;
   int multiplier = 1;
+
+  Utilities utils;
 
   // Request and Response for changing camera service
   std_srvs::EmptyRequest req;
@@ -437,6 +438,9 @@ int main ( int argc, char **argv )
               //front_camera = !front_camera;
               //cout << front_camera << endl;
               //cmd_pub.publish( clear );
+
+              last_view_offset.SetOffset(utils.UpdateUGVPosition(current_time_sec, last_msg, &ts_map));
+
 
               move_by_rel.data = MarkerLost(&lost_count, &count, k_roll, k_pitch, k_gaz, &was_reverse, &initialization_after_tf_lost, &tf_lost_compensatory, &multiplier, &last_view_offset, &critical_phase, target_x, target_y, target_z, &marker_was_lost);;
               cmd_pub.publish<> ( move_by_rel );
