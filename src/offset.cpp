@@ -223,4 +223,22 @@ Offset Offset::FromEncodingToOffset(std::string encoding)
 
   //std::cout << offset.GetRoll() << " " << offset.GetPitch() << " " << offset.GetGaz() << " " << offset.GetYaw() << std::endl;
 
+  return offset;
+
+}
+
+Offset Offset::operator =(Offset offset_2)
+{
+  this->roll_ = offset_2.GetRoll();
+  this->pitch_ = offset_2.GetPitch();
+  this->gaz_ = offset_2.GetGaz();
+  this->yaw_ = offset_2.GetYaw();
+}
+
+Offset Offset::operator +=(Offset offset_2)
+{
+  this->roll_ += offset_2.GetRoll();
+  this->pitch_ += offset_2.GetPitch();
+  this->gaz_ += offset_2.GetGaz();
+  this->yaw_ += offset_2.GetYaw();
 }

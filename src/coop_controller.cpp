@@ -439,8 +439,11 @@ int main ( int argc, char **argv )
               //cout << front_camera << endl;
               //cmd_pub.publish( clear );
 
-              last_view_offset.SetOffset(utils.UpdateUGVPosition(current_time_sec, last_msg, &ts_map));
+               std::cout << last_view_offset.GetRoll() << " " << last_view_offset.GetPitch() << " " << last_view_offset.GetGaz() << " " << last_view_offset.GetYaw() << endl;
 
+              //TODO: save the last ugv position and everytime check if the actual time is the same of the old one; in this case do not update the last_view_offset
+              last_view_offset += utils.UpdateUGVPosition(current_time_sec, last_msg, &ts_map);
+              std::cout << last_view_offset.GetRoll() << " " << last_view_offset.GetPitch() << " " << last_view_offset.GetGaz() << " " << last_view_offset.GetYaw() << endl;
 
               move_by_rel.data = MarkerLost(&lost_count, &count, k_roll, k_pitch, k_gaz, &was_reverse, &initialization_after_tf_lost, &tf_lost_compensatory, &multiplier, &last_view_offset, &critical_phase, target_x, target_y, target_z, &marker_was_lost);;
               cmd_pub.publish<> ( move_by_rel );

@@ -30,6 +30,8 @@ public:
   void RotateOnly(Offset *offset, float target_x, float target_y, bool *tf_lost_compensatory);
   std::string FromOffsetToEncoding (geometry_msgs::Point position, tfScalar yaw);
   Offset FromEncodingToOffset(std::string encoding);
+  Offset operator=( const Offset offset_2);
+  Offset operator+=( const Offset offset_2);
 
 protected:
   double roll_;
