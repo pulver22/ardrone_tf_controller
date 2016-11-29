@@ -369,6 +369,7 @@ int main ( int argc, char **argv )
           if ( move_by_rel.data.compare ( "c moveByRel 0 0 0 0" ) == 0 )
             {
               ROS_INFO ( "Destination reached" );
+              cmd_pub.publish<> ( clear );
               cmd_pub.publish<> ( land );
               //after landing switch camera to the front one, to facilitate the takeoff
               ros::service::call<> ( "/uav1/togglecam", req, res );
@@ -433,20 +434,24 @@ int main ( int argc, char **argv )
 
               // NOTE: The switch is realised when marker is lost (down in the code),remove it here otherwise two changes disable each other effect
               // FIXME: where down in the code?
-              //ros::service::call<> ( "/uav1/togglecam", req, res );
+              ros::service::call<> ( "/uav1/togglecam", req, res );
               //cout << front_camera << endl;
-              //front_camera = !front_camera;
+              front_camera = !front_camera;
               //cout << front_camera << endl;
-              //cmd_pub.publish( clear );
+              cmd_pub.publish( clear );
 
-               std::cout << last_view_offset.GetRoll() << " " << last_view_offset.GetPitch() << " " << last_view_offset.GetGaz() << " " << last_view_offset.GetYaw() << endl;
+               std::cout << "Last offset (x,y,z,yaw): " << last_view_offset.GetRoll() << " " << last_view_offset.GetPitch() << " " << last_view_offset.GetGaz() << " " << last_view_offset.GetYaw() << endl;
 
               //TODO: save the last ugv position and everytime check if the actual time is the same of the old one; in this case do not update the last_view_offset
-              last_view_offset += utils.UpdateUGVPosition(current_time_sec, last_msg, &ts_map);
-              std::cout << last_view_offset.GetRoll() << " " << last_view_offset.GetPitch() << " " << last_view_offset.GetGaz() << " " << last_view_offset.GetYaw() << endl;
+              compensatory_offset = utils.UpdateUGVPosition(current_time_sec, last_msg, &ts_map);
+              // Sum the new relative UGV position to the offset relative to last time UGV has been seen
+              compensatory_offset += last_view_offset;
 
-              move_by_rel.data = MarkerLost(&lost_count, &count, k_roll, k_pitch, k_gaz, &was_reverse, &initialization_after_tf_lost, &tf_lost_compensatory, &multiplier, &last_view_offset, &critical_phase, target_x, target_y, target_z, &marker_was_lost);;
+              std::cout << "New compensatory offset (x,y,z,yaw): " <<  compensatory_offset.GetRoll() << " " << compensatory_offset.GetPitch() << " " << compensatory_offset.GetGaz() << " " << compensatory_offset.GetYaw() << endl;
+
+              move_by_rel.data = MarkerLost(&lost_count, &count, k_roll, k_pitch, k_gaz, &was_reverse, &initialization_after_tf_lost, &tf_lost_compensatory, &multiplier, &compensatory_offset, &critical_phase, target_x, target_y, target_z, &marker_was_lost);;
               cmd_pub.publish<> ( move_by_rel );
+
               cout << move_by_rel.data << endl;
 
             }
@@ -576,9 +581,9 @@ string MarkerLost(int *lost_count, int *count, int k_roll, int k_pitch, int k_ga
               last_view_offset->SetYaw( 0 );
             }
 
-          control_cmd = "c moveByRel " + boost::lexical_cast<std::string> ( (*multiplier) * k_roll * last_view_offset->GetRoll() + target_x * (*lost_count) ) + " "+
-              boost::lexical_cast<std::string> ( (*multiplier) * k_pitch * last_view_offset->GetPitch() + target_y * (*lost_count)) + " " +
-              boost::lexical_cast<std::string> ( k_gaz * target_z * (*lost_count) ) + " " +
+          control_cmd = "c moveByRel " + boost::lexical_cast<std::string> ( (*multiplier) * k_roll * last_view_offset->GetRoll() /* +  target_x * (*lost_count)*/) + " "+
+              boost::lexical_cast<std::string> ( (*multiplier) * k_pitch * last_view_offset->GetPitch() /* + target_y * (*lost_count)*/) + " " +
+              boost::lexical_cast<std::string> ( k_gaz * target_z /* * (*lost_count) */) + " " +
               boost::lexical_cast<std::string> ( last_view_offset->GetYaw() );
         }
       *marker_was_lost = true;

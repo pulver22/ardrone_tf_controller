@@ -32,7 +32,7 @@ Offset Utilities::UpdateUGVPosition(int current_time_stamp, int old_time_stamp, 
   new_offset.SetGaz( new_ugv_position.GetGaz() - old_ugv_position.GetGaz() );
   new_offset.SetYaw( new_ugv_position.GetYaw() - old_ugv_position.GetYaw() );
 
-   std::cout << new_offset.GetRoll() << " " << new_offset.GetPitch() << " " << new_offset.GetGaz() << " " << new_offset.GetYaw() << endl;
+   std::cout <<"UGV position (x,y,z,yaw): " <<  new_offset.GetRoll() << " " << new_offset.GetPitch() << " " << new_offset.GetGaz() << " " << new_offset.GetYaw() << std::endl;
 
   return new_offset;
 
