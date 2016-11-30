@@ -126,6 +126,7 @@ int main ( int argc, char **argv )
 
   ros::Publisher linear_offset_pub = nh.advertise<geometry_msgs::Vector3> ( "/linear_offset", 100 );
   ros::Publisher rotational_offset_pub = nh.advertise<std_msgs::Float32> ( "/rotation_offset", 100 );
+  ros::Publisher stop_husky_pub = nh.advertise<geometry_msgs::Twist> ("/husky/cmd_vel",100);
 
   //Service client for change the camera feedback
   ros::ServiceClient client = nh.serviceClient<std_srvs::Empty> ( "/uav1/togglecam" );
@@ -144,6 +145,14 @@ int main ( int argc, char **argv )
   stay_time.data = "setStayTime 0.5";
   take_off.data = "c takeoff";
   land.data = "c land";
+
+  geometry_msgs::Twist stop_husky;
+  stop_husky.angular.x = 0.0;
+  stop_husky.angular.y = 0.0;
+  stop_husky.angular.z = 0.0;
+  stop_husky.linear.x = 0.0;
+  stop_husky.linear.y = 0.0;
+  stop_husky.linear.z = 0.0;
 
 
   // Record if the drone is looking good in the same direction of the marker
@@ -345,6 +354,13 @@ int main ( int argc, char **argv )
       // Create a copy of the current_offset to evaluate the compensatory factor
       compensatory_offset.SetOffset ( current_offset );
 
+      // If UAV is above UGV, send a stop command to this
+      if(abs(current_offset.GetRoll()) < 0.5 && abs(current_offset.GetPitch()) < 0.5 )
+        {
+          ROS_WARN("Sending stop command to UGV");
+          stop_husky_pub.publish( stop_husky );
+        }
+
       // Modify current_offset in proximity of the target
       current_offset.ReduceOffsetToZero ( current_offset, target_x, target_y, target_z, target_yaw );
 
@@ -440,14 +456,15 @@ int main ( int argc, char **argv )
               //cout << front_camera << endl;
               cmd_pub.publish( clear );
 
-               std::cout << "Last offset (x,y,z,yaw): " << last_view_offset.GetRoll() << " " << last_view_offset.GetPitch() << " " << last_view_offset.GetGaz() << " " << last_view_offset.GetYaw() << endl;
+               //std::cout << "Last offset (x,y,z,yaw): " << last_view_offset.GetRoll() << " " << last_view_offset.GetPitch() << " " << last_view_offset.GetGaz() << " " << last_view_offset.GetYaw() << endl;
 
               //TODO: save the last ugv position and everytime check if the actual time is the same of the old one; in this case do not update the last_view_offset
               compensatory_offset = utils.UpdateUGVPosition(current_time_sec, last_msg, &ts_map);
+
               // Sum the new relative UGV position to the offset relative to last time UGV has been seen
               compensatory_offset += last_view_offset;
 
-              std::cout << "New compensatory offset (x,y,z,yaw): " <<  compensatory_offset.GetRoll() << " " << compensatory_offset.GetPitch() << " " << compensatory_offset.GetGaz() << " " << compensatory_offset.GetYaw() << endl;
+              //std::cout << "New compensatory offset (x,y,z,yaw): " <<  compensatory_offset.GetRoll() << " " << compensatory_offset.GetPitch() << " " << compensatory_offset.GetGaz() << " " << compensatory_offset.GetYaw() << endl;
 
               move_by_rel.data = MarkerLost(&lost_count, &count, k_roll, k_pitch, k_gaz, &was_reverse, &initialization_after_tf_lost, &tf_lost_compensatory, &multiplier, &compensatory_offset, &critical_phase, target_x, target_y, target_z, &marker_was_lost);;
               cmd_pub.publish<> ( move_by_rel );
@@ -547,6 +564,8 @@ string MarkerLost(int *lost_count, int *count, int k_roll, int k_pitch, int k_ga
     {
 
       k_roll = k_pitch = k_gaz = 1.0;
+      //std::cout << last_view_offset->GetRoll() << " " << last_view_offset->GetPitch() << " " << last_view_offset->GetGaz() << " " << last_view_offset->GetYaw() << std::endl;
+
       // Redirect the drone towards the last position in which the drone was seen
       if ( *was_reverse == true && *initialization_after_tf_lost == false )
         {
@@ -565,9 +584,9 @@ string MarkerLost(int *lost_count, int *count, int k_roll, int k_pitch, int k_ga
             }
 
           ROS_WARN("Marker lost while reversed");
-          control_cmd = "c moveByRel " + boost::lexical_cast<std::string> ( (*multiplier) * k_roll * last_view_offset->GetRoll() + target_x/2 * (*lost_count) ) + " "+
-              boost::lexical_cast<std::string> ( (*multiplier) * k_pitch * last_view_offset->GetPitch() + target_y * (*lost_count) ) + " " +
-              boost::lexical_cast<std::string> ( k_gaz * target_z * (*lost_count) ) + " " +
+          control_cmd = "c moveByRel " + boost::lexical_cast<std::string> ( (*multiplier) * k_roll * last_view_offset->GetRoll() /* + target_x/2 * (*lost_count) */ ) + " "+
+              boost::lexical_cast<std::string> ( (*multiplier) * k_pitch * last_view_offset->GetPitch() /* + target_y * (*lost_count) */ ) + " " +
+              boost::lexical_cast<std::string> ( k_gaz * target_z  * (*lost_count) ) + " " +
               boost::lexical_cast<std::string> ( 0 );
         }
       else
@@ -583,7 +602,7 @@ string MarkerLost(int *lost_count, int *count, int k_roll, int k_pitch, int k_ga
 
           control_cmd = "c moveByRel " + boost::lexical_cast<std::string> ( (*multiplier) * k_roll * last_view_offset->GetRoll() /* +  target_x * (*lost_count)*/) + " "+
               boost::lexical_cast<std::string> ( (*multiplier) * k_pitch * last_view_offset->GetPitch() /* + target_y * (*lost_count)*/) + " " +
-              boost::lexical_cast<std::string> ( k_gaz * target_z /* * (*lost_count) */) + " " +
+              boost::lexical_cast<std::string> ( k_gaz * target_z  * (*lost_count) ) + " " +
               boost::lexical_cast<std::string> ( last_view_offset->GetYaw() );
         }
       *marker_was_lost = true;

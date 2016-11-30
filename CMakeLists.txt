@@ -33,6 +33,7 @@ add_executable(single_tf_controller src/ardrone_tf_controller.cpp)
 add_executable(frontcamera_autopilot src/frontcamera_autopilot.cpp)
 add_executable(bottomcamera_autopilot src/bottomcamera_autopilot.cpp)
 add_executable(coop_controller src/coop_controller.cpp)
+add_executable(reset_filter src/reset_filter.cpp)
 
 
 target_link_libraries(single_tf_controller ardrone_tf_controller
@@ -51,6 +52,9 @@ target_link_libraries(coop_controller ardrone_tf_controller
    ${catkin_LIBRARIES}
 )
 
+target_link_libraries(reset_filter ardrone_tf_controller
+   ${catkin_LIBRARIES}
+)
 
 
 list( APPEND CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS} -O3 -g  -ftest-coverage -fprofile-arcs")

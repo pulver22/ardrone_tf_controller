@@ -237,8 +237,28 @@ Offset Offset::operator =(Offset offset_2)
 
 Offset Offset::operator +=(Offset offset_2)
 {
-  this->roll_ += offset_2.GetRoll();
-  this->pitch_ += offset_2.GetPitch();
-  this->gaz_ += offset_2.GetGaz();
+  int sign = 1;
+
+  if(offset_2.GetRoll() > 0)
+    {
+      sign = 1;
+    }
+  else sign = -1;
+  this->roll_ += sign * abs( offset_2.GetRoll() );
+
+  if(offset_2.GetPitch() > 0)
+    {
+      sign = 1;
+    }
+  else sign = -1;
+  this->pitch_ += sign * abs( offset_2.GetPitch() );
+
+  if(offset_2.GetGaz() > 0)
+    {
+      sign = 1;
+    }
+  else sign = -1;
+  this->gaz_ += sign * abs( offset_2.GetGaz() );
+
   this->yaw_ += offset_2.GetYaw();
 }
