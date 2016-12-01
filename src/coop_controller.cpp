@@ -10,6 +10,7 @@
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/Vector3.h>
 #include <geometry_msgs/Twist.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <tf2/transform_datatypes.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf/LinearMath/Matrix3x3.h>
@@ -21,6 +22,7 @@
 #include <sensor_msgs/CameraInfo.h>
 #include <ros/callback_queue.h>
 #include <nav_msgs/Odometry.h>
+#include <robot_localization/SetPose.h>
 
 #include <ar_pose/ARMarker.h>
 
@@ -127,6 +129,7 @@ int main ( int argc, char **argv )
   ros::Publisher linear_offset_pub = nh.advertise<geometry_msgs::Vector3> ( "/linear_offset", 100 );
   ros::Publisher rotational_offset_pub = nh.advertise<std_msgs::Float32> ( "/rotation_offset", 100 );
   ros::Publisher stop_husky_pub = nh.advertise<geometry_msgs::Twist> ("/husky/cmd_vel",100);
+  ros::Publisher reset_filter_pub = nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("/husky/set_pose", 1000);
 
   //Service client for change the camera feedback
   ros::ServiceClient client = nh.serviceClient<std_srvs::Empty> ( "/uav1/togglecam" );
@@ -145,6 +148,41 @@ int main ( int argc, char **argv )
   stay_time.data = "setStayTime 0.5";
   take_off.data = "c takeoff";
   land.data = "c land";
+
+  geometry_msgs::PoseWithCovarianceStamped pose_with_cov_st;
+  // set message's header
+  pose_with_cov_st.header.stamp = ros::Time::now();
+  pose_with_cov_st.header.frame_id = "/odom";
+  // set position
+  pose_with_cov_st.pose.pose.position.x = 0;
+  pose_with_cov_st.pose.pose.position.y = 0;
+  pose_with_cov_st.pose.pose.position.z = 0;
+  // set orientation
+  pose_with_cov_st.pose.pose.orientation.x = 0;
+  pose_with_cov_st.pose.pose.orientation.y = 0;
+  pose_with_cov_st.pose.pose.orientation.z = 0;
+  pose_with_cov_st.pose.pose.orientation.w = 0;
+
+
+  // Service msg to reset estimation filter state
+  robot_localization::SetPose pose_estimation_filter_default;
+  pose_estimation_filter_default.request.pose.header.seq = 0;
+  pose_estimation_filter_default.request.pose.header.stamp.sec = 0;
+  pose_estimation_filter_default.request.pose.header.stamp.nsec = 0;
+  pose_estimation_filter_default.request.pose.header.frame_id = ' ';
+  pose_estimation_filter_default.request.pose.pose.pose.position.x = 0.0;
+  pose_estimation_filter_default.request.pose.pose.pose.position.y = 0.0;
+  pose_estimation_filter_default.request.pose.pose.pose.position.z = 0.0;
+  pose_estimation_filter_default.request.pose.pose.pose.orientation.x = 0.0;
+  pose_estimation_filter_default.request.pose.pose.pose.orientation.y = 0.0;
+  pose_estimation_filter_default.request.pose.pose.pose.orientation.z = 0.0;
+  pose_estimation_filter_default.request.pose.pose.pose.orientation.w = 0.0;
+  pose_estimation_filter_default.request.pose.pose.covariance = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+
+
+
 
   geometry_msgs::Twist stop_husky;
   stop_husky.angular.x = 0.0;
@@ -237,17 +275,17 @@ int main ( int argc, char **argv )
       }
       catch ( tf2::TransformException &ex )
       {
-        //ROS_WARN ( "%s", ex.what() );
+        ROS_WARN ( "%s", ex.what() );
 
         // if marker is not detected, call the service and switch the camera; then move upward and wait two seconds
         // NOTE: in these two second no perceptions are done!
         if ( count > 1 )
           {
-            ros::service::call<> ( "/uav1/togglecam", req, res );
+            //ros::service::call<> ( "/uav1/togglecam", req, res );
             // call the camera callback
-            camera_queue.callAvailable ( ros::WallDuration() );
+            //camera_queue.callAvailable ( ros::WallDuration() );
             //cout << front_camera << endl;
-            front_camera = !front_camera;
+            //front_camera = !front_camera;
             //cout << front_camera << endl;
             // Move the drone upward only if the drone has not been lost, in that case follow the last perception
             if(marker_was_lost == false){
@@ -438,6 +476,12 @@ int main ( int argc, char **argv )
                   last_view_offset.SetOffset ( compensatory_offset );
                 }
               lost_count = 0;
+
+              //Call the service or pusblish a message to reset the filter state and improve its reliability
+              //FIX: the service is not working, I got some errors about the serialization of the request message
+              //ros::service::call<> ("/husky/set_pose", pose_estimation_filter_default, pose_estimation_filter_default);
+              reset_filter_pub.publish(pose_with_cov_st);
+              ROS_WARN("Message to reset UKF filter sent");
             }
           else
             {
@@ -451,9 +495,8 @@ int main ( int argc, char **argv )
               // NOTE: The switch is realised when marker is lost (down in the code),remove it here otherwise two changes disable each other effect
               // FIXME: where down in the code?
               ros::service::call<> ( "/uav1/togglecam", req, res );
-              //cout << front_camera << endl;
               front_camera = !front_camera;
-              //cout << front_camera << endl;
+
               cmd_pub.publish( clear );
 
                //std::cout << "Last offset (x,y,z,yaw): " << last_view_offset.GetRoll() << " " << last_view_offset.GetPitch() << " " << last_view_offset.GetGaz() << " " << last_view_offset.GetYaw() << endl;
