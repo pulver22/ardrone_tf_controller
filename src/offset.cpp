@@ -102,7 +102,7 @@ void Offset::FromTfToOffset(Offset *offset, geometry_msgs::TransformStamped tf, 
         }
       (*offset).SetRoll ( -multiplier * tf.transform.translation.x );
       (*offset).SetPitch ( -multiplier * tf.transform.translation.y );
-      (*offset).SetGaz ( -abs ( tf.transform.translation.z ) );
+      (*offset).SetGaz ( -std::abs ( tf.transform.translation.z ) );
       (*offset).SetYaw ( ( float ) yaw * 180 / PI );
       break;
 
@@ -112,12 +112,12 @@ void Offset::FromTfToOffset(Offset *offset, geometry_msgs::TransformStamped tf, 
       (*offset).SetRoll ( multiplier * tf.transform.translation.x );
       (*offset).SetPitch ( multiplier * tf.transform.translation.y );
 
-      if ( front_camera == true && abs ( yaw ) < abs ( PI/2 + epsilon ) )
+      if ( front_camera == true && std::abs ( yaw ) < std::abs ( PI/2 + epsilon ) )
         {
           (*offset).SetRoll ( - multiplier * tf.transform.translation.y );
           (*offset).SetPitch ( multiplier * tf.transform.translation.x );
         }
-      (*offset).SetGaz ( -abs ( tf.transform.translation.z ) );
+      (*offset).SetGaz ( -std::abs ( tf.transform.translation.z ) );
       (*offset).SetYaw ( ( ( float ) yaw * 180 / PI ) );
 
     }
@@ -128,7 +128,7 @@ void Offset::FromTfToOffset(Offset *offset, geometry_msgs::TransformStamped tf, 
 // Increase the offsets to center the UAV and prevent it's not able to track the moving marker
 void Offset::CentreFOV(Offset *offset, float target_x, float target_y, double camera_alignment_x)
 {
-  if ( abs(offset->GetRoll()) > target_x || abs(offset->GetPitch()) > target_y)
+  if ( std::abs(offset->GetRoll()) > target_x || std::abs(offset->GetPitch()) > target_y)
     {
       //cout << camera_alignment_x << endl;
       if ( camera_alignment_x > 0.4 )
@@ -149,15 +149,17 @@ void Offset::CentreUAV(Offset *offset, float target_x, float target_y)
   if(offset->GetRoll() > target_x)
     {
       offset->SetRoll(offset->GetRoll() + 0.5);
-    } else{
-      offset->SetRoll(offset->GetRoll() - 0.5);
+    } else if(offset->GetRoll() < 0)
+    {
+      offset->SetRoll( offset->GetRoll() - 0.5);
     }
 
   if(offset->GetPitch() > target_y)
     {
-      offset->SetPitch(offset->GetPitch() + 0.5);
-    } else{
-      offset->SetPitch(offset->GetPitch() - 0.5);
+      offset->SetPitch( offset->GetPitch() + 0.5);
+    } else if(offset->GetPitch() < 0)
+    {
+      offset->SetPitch( offset->GetPitch() - 0.5);
     }
 }
 
@@ -239,26 +241,29 @@ Offset Offset::operator +=(Offset offset_2)
 {
   int sign = 1;
 
+  //std::cout << "Last offset (x,y,z,yaw): " << this->GetRoll() << " " << this->GetPitch() << " " << this->GetGaz() << " " << this->GetYaw() << std::endl;
+
+  //std::cout << "Offset_2 (x,y,z,yaw): " << offset_2.GetRoll() << " " << offset_2.GetPitch() << " " << offset_2.GetGaz() << " " << offset_2.GetYaw() << std::endl;
   if(offset_2.GetRoll() > 0)
     {
       sign = 1;
     }
   else sign = -1;
-  this->roll_ += sign * abs( offset_2.GetRoll() );
+  this->roll_ += sign * std::abs(offset_2.GetRoll());
 
   if(offset_2.GetPitch() > 0)
     {
       sign = 1;
     }
   else sign = -1;
-  this->pitch_ += sign * abs( offset_2.GetPitch() );
+  this->pitch_ += sign * std::abs( offset_2.GetPitch() );
 
   if(offset_2.GetGaz() > 0)
     {
       sign = 1;
     }
   else sign = -1;
-  this->gaz_ += sign * abs( offset_2.GetGaz() );
+  this->gaz_ += sign * std::abs( offset_2.GetGaz() );
 
   this->yaw_ += offset_2.GetYaw();
 }

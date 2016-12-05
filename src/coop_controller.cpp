@@ -281,13 +281,13 @@ int main ( int argc, char **argv )
         // NOTE: in these two second no perceptions are done!
         if ( count > 1 )
           {
-            //ros::service::call<> ( "/uav1/togglecam", req, res );
+            ros::service::call<> ( "/uav1/togglecam", req, res );
             // call the camera callback
-            //camera_queue.callAvailable ( ros::WallDuration() );
+            camera_queue.callAvailable ( ros::WallDuration() );
             //cout << front_camera << endl;
-            //front_camera = !front_camera;
+            front_camera = !front_camera;
             //cout << front_camera << endl;
-            // Move the drone upward only if the drone has not been lost, in that case follow the last perception
+            // Move the drone upward only if the marker has not been lost, in that case follow the last perception
             if(marker_was_lost == false){
                 cmd_pub.publish<> ( clear );
                 // Move the drone upward to increment current camera's FOV and rotate
@@ -337,7 +337,7 @@ int main ( int argc, char **argv )
       if ( marker_detected == true )
         {
           // NOTE: just changed front_cam to fit the stream fix
-          if ( ( ( yaw > -epsilon ) && ( yaw < epsilon ) && front_camera == true ) || ( ( abs ( yaw ) < ( PI/2 ) ) && front_camera == false ) )
+          if ( ( ( yaw > -epsilon ) && ( yaw < epsilon ) && front_camera == true ) || ( ( std::abs ( yaw ) < ( PI/2 ) ) && front_camera == false ) )
             {
               cout << "Branch 1: drone loooking good" << endl;
               branch = 1;
@@ -356,7 +356,7 @@ int main ( int argc, char **argv )
             }
 
           // Increase the offsets to center the UAV and prevent it's not able to track the moving marker
-          current_offset.CentreUAV(&current_offset, target_x, target_y);
+          //current_offset.CentreUAV(&current_offset, target_x, target_y);
 
 
         }
@@ -393,7 +393,7 @@ int main ( int argc, char **argv )
       compensatory_offset.SetOffset ( current_offset );
 
       // If UAV is above UGV, send a stop command to this
-      if(abs(current_offset.GetRoll()) < 0.5 && abs(current_offset.GetPitch()) < 0.5 )
+      if(std::abs(current_offset.GetRoll()) < 0.8 && std::abs(current_offset.GetPitch()) < 0.8 )
         {
           ROS_WARN("Sending stop command to UGV");
           stop_husky_pub.publish( stop_husky );
@@ -477,11 +477,11 @@ int main ( int argc, char **argv )
                 }
               lost_count = 0;
 
-              //Call the service or pusblish a message to reset the filter state and improve its reliability
+              //Call the service or publish a message to reset the filter state and improve its reliability
               //FIX: the service is not working, I got some errors about the serialization of the request message
               //ros::service::call<> ("/husky/set_pose", pose_estimation_filter_default, pose_estimation_filter_default);
               reset_filter_pub.publish(pose_with_cov_st);
-              ROS_WARN("Message to reset UKF filter sent");
+              //ROS_WARN("Message to reset position estimastion filter sent");
             }
           else
             {
@@ -518,14 +518,6 @@ int main ( int argc, char **argv )
 
         }
 
-
-      /*
-      cout << "Number of entries: " << ts_map.size() << endl;
-      for(auto it = ts_map.begin(); it != ts_map.end(); it++)
-        {
-          cout << it->first << " " << it->second << endl;
-        }
-        */
       cout << "--------------------------" << endl;
 
 
@@ -535,8 +527,8 @@ int main ( int argc, char **argv )
       multiplier = 1;
       count++;
 
-      ros::spinOnce();
       rate.sleep();
+      ros::spinOnce();
     }
 
   return 0;
@@ -591,7 +583,7 @@ float getCompensatoryFactor ( double current_offset, double last_offset, int cou
           break;
         }
       // NOTE: tmpCompensatoryFactor decreases as linear function
-      tmp_compensatory_factor = max ( 1.0, angular_coefficient * ( abs ( current_offset ) - abs ( target ) ) + ordinata );
+      tmp_compensatory_factor = max ( 1.0, angular_coefficient * ( std::abs ( current_offset ) - std::abs ( target ) ) + ordinata );
     }
 
   //cout << "Inside function: " << type << " : " << tmp_compensatory_factor << endl;
