@@ -7,7 +7,7 @@ Position controller for landing a Parrot ARDrone using ARToolkit fiducial marker
 
 * [teleop_ardrone](teleop_ardrone): Contains the keyboard and space-navigator controller for the ardrone.
 * [tum_simulator](tum_simulator): Contains the gazebo world files, the ardrone model with the plugins and the simulation launch files.
-* [uga_tum_ardrone](tum_ardrone): Contains a suite for state estimation, autopilot and gui for controlling the ardrone model.
+* [uga_tum_ardrone](uga_tum_ardrone): Contains a suite for state estimation, autopilot and gui for controlling the ardrone model.
 * [ardrone_tf_controller](ardrone_tf_controller): Extract the fiducial marker's pose and forward it to the ardrone model for accomplish autonomous landing.
 
 ## Environment
