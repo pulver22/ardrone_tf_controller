@@ -1,0 +1,119 @@
+<?xml version="1.0"?>
+<!--
+Software License Agreement (BSD)
+
+\file      husky.gazebo.xacro
+\authors   Paul Bovbel <pbovbel@clearpathrobotics.com, Devon Ash <dash@clearpathrobotics.com>
+\copyright Copyright (c) 2015, Clearpath Robotics, Inc., All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that
+the following conditions are met:
+ * Redistributions of source code must retain the above copyright notice, this list of conditions and the
+   following disclaimer.
+ * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
+   following disclaimer in the documentation and/or other materials provided with the distribution.
+ * Neither the name of Clearpath Robotics nor the names of its contributors may be used to endorse or promote
+   products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WAR-
+RANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, IN-
+DIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-->
+<robot name="husky_robot_gazebo" xmlns:xacro="http://ros.org/wiki/xacro">
+
+    <xacro:include filename="$(find husky_gazebo)/urdf/accessories/kinect_camera.gazebo.xacro"/>
+
+    <xacro:macro name="husky_robot_gazebo">
+
+        <gazebo>
+            <plugin name="imu_controller" filename="libhector_gazebo_ros_imu.so">
+                <robotNamespace>/</robotNamespace>
+                <updateRate>50.0</updateRate>
+                <bodyName>base_link</bodyName>
+                <frameid>husky/base_link</frameid>
+                <topicName>imu/data</topicName>
+                <gaussianNoise>0</gaussianNoise>
+                <offset>0.0 0.0 0.0</offset>
+                <driftFrequency>0.0 0.0 0.0</driftFrequency>
+                <accelOffset>0 0 0</accelOffset>
+                <accelDrift>0.005 0.005 0.005</accelDrift>
+                <accelDriftFrequency>0.0 0.0 0.0</accelDriftFrequency>
+                <accelGaussianNoise>0.005 0.005 0.005</accelGaussianNoise>
+                <rateOffset>0.0 0.0 0.0</rateOffset>
+                <rateDrift>0.005 0.005 0.005
+                </rateDrift>
+                <rateDriftFrequency>0.0 0.0 0.0</rateDriftFrequency>
+                <rateGaussianNoise>0.005 0.005 0.005
+                </rateGaussianNoise>
+                <headingDrift>0.005</headingDrift>
+                <headingDriftFrequency>0.0</headingDriftFrequency>
+                <headingOffset>0.0</headingOffset>
+                <headingGaussianNoise>0.005</headingGaussianNoise>
+            </plugin>
+        </gazebo>
+
+        <gazebo>
+            <plugin name="gps_controller" filename="libhector_gazebo_ros_gps.so">
+                <updateRate>40</updateRate>
+                <robotNamespace>/</robotNamespace>
+                <bodyName>base_link</bodyName>
+                <frameId>husky/base_link</frameId>
+                <topicName>navsat/fix</topicName>
+                <offset>0.0 0.0 0.0</offset>
+                <velocityTopicName>navsat/vel</velocityTopicName>
+                <drift>0.0001 0.0001 0.0001</drift>
+                <driftFrequency>0.0 0.0 0.0</driftFrequency>
+                <gaussianNoise>0.0 0.0 0.0</gaussianNoise>
+                <velocityDrift>0 0 0</velocityDrift>
+                <velocityOffset>0 0 0</velocityOffset>
+                <velocityDriftFrequency>0.0 0.0 0.0</velocityDriftFrequency>
+                <velocityGaussianNoise>0.0 0.0 0.0</velocityGaussianNoise>
+                <referenceLatitude>49.9</referenceLatitude>
+                <referenceLongitude>8.9</referenceLongitude>
+                <referenceHeading>0</referenceHeading>
+                <referenceAltitude>0</referenceAltitude>
+            </plugin>
+        </gazebo>
+
+        <gazebo>
+            <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so"/>
+            <robotNamespace>/husky</robotNamespace>
+        </plugin>
+    </gazebo>
+
+    <xacro:if value="$(arg ur5_enabled)">
+        <!--Remove when https://github.com/ros-industrial/universal_robot/pull/168 is resolved -->
+        <gazebo reference="ur5_arm_shoulder_link">
+            <selfCollide>true</selfCollide>
+        </gazebo>
+        <gazebo reference="ur5_arm_upper_arm_link">
+            <selfCollide>true</selfCollide>
+        </gazebo>
+        <gazebo reference="ur5_arm_forearm_link">
+            <selfCollide>true</selfCollide>
+        </gazebo>
+        <gazebo reference="ur5_arm_wrist_1_link">
+            <selfCollide>true</selfCollide>
+        </gazebo>
+        <gazebo reference="ur5_arm_wrist_3_link">
+            <selfCollide>true</selfCollide>
+        </gazebo>
+        <gazebo reference="ur5_arm_wrist_2_link">
+            <selfCollide>true</selfCollide>
+        </gazebo>
+        <gazebo reference="ur5_arm_ee_link">
+            <selfCollide>true</selfCollide>
+        </gazebo>
+    </xacro:if>
+
+    <xacro:if value="$(arg kinect_enabled)">
+        <xacro:kinect_camera_gazebo prefix="camera"/>
+    </xacro:if>
+
+</xacro:macro>
+
+</robot>

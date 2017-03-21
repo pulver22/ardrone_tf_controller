@@ -1,0 +1,18 @@
+<launch>
+  <arg name="drone_ip" default="127.0.0.1"/>
+
+  <node name="drone_stateestimation" pkg="uga_tum_ardrone" type="drone_stateestimation">
+  </node>
+  <node name="drone_autopilot" pkg="uga_tum_ardrone" type="drone_autopilot">
+	<remap from="/cmd_vel" to="/uav1/cmd_vel"/>
+	<remap from="/ardrone/takeoff" to="/uav1/takeoff"/>
+	<remap from="/ardrone/land" to="/uav1/land"/>
+	<remap from="/ardrone/reset" to="/uav1/reset"/>=
+  </node>
+  <node name="drone_gui" pkg="uga_tum_ardrone" type="drone_gui">
+	<param name="DroneIP" value="$(arg drone_ip)"/>
+	<remap from="/ardrone/takeoff" to="/uav1/takeoff"/>
+	<remap from="/ardrone/land" to="/uav1/land"/>
+	<remap from="/ardrone/reset" to="/uav1/reset"/>
+  </node>
+</launch>

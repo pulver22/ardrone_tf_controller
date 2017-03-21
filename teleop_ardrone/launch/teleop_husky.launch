@@ -1,0 +1,7 @@
+<launch>
+
+    <!-- Start the keyboard control -->
+    <node name="teleop_husky" pkg="teleop_ardrone" type="teleop_husky.py" output="screen"/>
+
+
+</launch>

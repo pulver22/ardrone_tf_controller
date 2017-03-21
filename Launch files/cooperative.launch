@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<launch>
+
+	<!-- Launch Gazebo simulator with the quadcopter and the husky robot -->
+  	<include file="$(find cvg_sim_gazebo)/launch/cooperative.launch"/>
+
+	<!-- Launch ar_pose node for marker detection -->
+	<include file="$(find ar_pose)/launch/ar_pose_single_gazebo.launch"/>
+
+	<!-- Launch the autopilot -->
+	<include file="$(find uga_tum_ardrone)/launch/coop_uga_tum_ardrone.launch"/>
+
+</launch>
+

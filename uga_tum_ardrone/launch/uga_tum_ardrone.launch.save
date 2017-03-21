@@ -1,0 +1,12 @@
+<launch>
+  <arg name="drone_ip" default="127.0.0.1"/>
+
+  <node name="drone_stateestimation" pkg="uga_tum_ardrone" type="drone_stateestimation">
+  </node>
+  <node name="drone_autopilot" pkg="uga_tum_ardrone" type="drone_autopilot
+  </node>
+  <node name="drone_gui" pkg="uga_tum_ardrone" type="drone_gui">
+	<param name="DroneIP" value="$(arg drone_ip)"/>
+	<remap from="/navdata" to="/ardrone/navdata"/>
+  </node>
+</launch>

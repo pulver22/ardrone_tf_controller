@@ -1,0 +1,26 @@
+##! /usr/bin/env python
+PACKAGE='uga_tum_ardrone'
+
+#from driver_base.msg import SensorLevels
+from dynamic_reconfigure.parameter_generator_catkin import *
+
+gen = ParameterGenerator()
+
+#       Name                         Type      Reconfiguration lvl    Description                                                   Default             Min     Max
+gen.add("K_direct", double_t, 0, "Spring strength parameter, gaz and yaw", 5.0, 0.001, 50.0)
+gen.add("K_rp", double_t, 0, "Spring strength parameter, roll and pitch", 0.5, 0.001, 50.0)
+gen.add("droneMassInKilos", double_t, 0, "Total drone mass (In KG)", .525, 0.01, 2.0)
+gen.add("max_yaw", double_t, 0, "Max. Yaw control sent (ever)", 0.2, 0.0, 1.0)
+gen.add("xy_damping_factor", double_t, 0, "Damping factor, 1 = critically damped", .65, 0.01, 10)
+
+gen.add("max_rp_radians", double_t, 0, "Maximum drone tilt in radians", 0.21, 0.01, 1.57)
+gen.add("rise_fac", double_t, 0, "positive gaz values are multiplied by this", 2.5, 0.0, 5.0)
+gen.add("max_gaz_rise", double_t, 0, "max. (positive) gaz control sent.", 1.0, 0, 2.0)
+gen.add("max_gaz_drop", double_t, 0, "max. (negative) gaz control sent.", -1.0, -2.0, 0.0)
+gen.add("max_rp", double_t, 0, "max roll/pitch control sent.", 1.0, 0.0, 1.0)
+
+gen.add("agressiveness", double_t, 0, "global multiplyer to PI control.", 1.0, 0.0, 5.0)
+
+
+
+exit(gen.generate(PACKAGE, "Config", "AutopilotParams"))

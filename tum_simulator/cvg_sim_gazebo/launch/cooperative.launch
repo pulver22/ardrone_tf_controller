@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<launch>
+
+    <arg name="model" value="$(find cvg_sim_gazebo)/urdf/quadrotor_sensors.urdf.xacro"/>
+    <param name="robot_description" command="$(find xacro)/xacro.py '$(arg model)'"/>
+
+    <arg name="husky_model" default="$(find cvg_sim_gazebo)/urdf/description.gazebo.xacro"/>
+    <param name="husky_description" command="$(find xacro)/xacro.py '$(arg husky_model)'"/>
+
+    <!-- We resume the logic in empty_world.launch, changing only the name of the world to be launched -->
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+        <arg name="world_name" value="$(find cvg_sim_gazebo)/worlds/cooperative_world.world"/>
+    </include>
+
+    <node pkg="tf" type="static_transform_publisher" name="world_to_husky"
+    args="0 3 0.17775 3.14 0 0 world odom 10" />
+
+    <node pkg="tf" type="static_transform_publisher" name="world_to_ardrone"
+    args="0 0 0 0 0 0 world uav1_tf/odom 10" />
+
+    <!-- Spawn simulated quadrotor uav -->
+    <group ns="uav1">
+        <param name="tf_prefix" value="uav1_tf"/>
+        <include file="$(find cvg_sim_gazebo)/launch/spawn_quadrotor.launch">
+            <arg name="name" value="uav1"/>
+            <arg name="namespace_arg" value="uav1"/>
+            <arg name="x" value="1.0"/>
+            <arg name="y" value="1.0"/>
+        </include>
+    </group>
+
+    <!-- Spawn simulated Husky A200 UGV -->
+
+    <group ns="husky">
+		<!-- if I remove the tf_prefix, the odom frame appear -->
+        <param name="tf_prefix" value=""/>
+        <arg name="laser_enabled" default="true"/>
+        <arg name="ur5_enabled" default="false"/>
+        <arg name="kinect_enabled" default="false"/>
+
+        <include file="$(find cvg_sim_gazebo)/launch/spawn_husky.launch">
+            <arg name="laser_enabled" value="$(arg laser_enabled)"/>
+            <arg name="ur5_enabled" value="$(arg ur5_enabled)"/>
+            <arg name="kinect_enabled" value="$(arg kinect_enabled)"/>
+            <arg name="name" value="husky"/>
+            <arg name="x" value="0.0"/>
+            <arg name="y" value="3.0"/>
+            <arg name="namespace_arg" value="husky"/>
+        </include>
+    </group>
+
+</launch>

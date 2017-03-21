@@ -1,0 +1,7 @@
+<launch>
+
+    <!-- Start the keyboard control -->
+    <node name="teleop_ardrone" pkg="teleop_ardrone" type="teleop_ardrone_keyboard_coop.py" output="screen"/>
+
+
+</launch>

@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<package>
+  <name>teleop_ardrone</name>
+  <version>0.9.0</version>
+  <description>Generic Keyboard and Spacenavigator teleop for ARdrone robot based.</description>
+
+  <maintainer email="namniart@gmail.com">Austin Hendrix - Twist teleop</maintainer>
+  <maintainer email="pulver22@gmail.com">Riccardo Polvara - ARdrone teleop</maintainer>
+
+  <license>BSD</license>
+
+  <url type="website">http://wiki.ros.org/teleop_twist_keyboard</url>
+  <url type="website">http://wiki.ros.org/spacenav_node</url>
+
+  <author>Graylin Trevor Jay</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  
+  <build_depend>message_generation</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>roscpp</build_depend>
+  <build_depend>rospy</build_depend>
+  <build_depend>spacenav_node</build_depend>
+  <build_depend>joy</build_depend>
+  
+  <run_depend>geometry_msgs</run_depend>
+  <run_depend>sensor_msgs</run_depend>
+  <run_depend>rospy</run_depend>
+  <run_depend>roscpp</run_depend>
+  <run_depend>spacenav_node</run_depend>
+  <run_depend>joy</run_depend>
+
+
+</package>

@@ -1,0 +1,6 @@
+<launch>
+
+    <!-- Start the keyboard control -->
+    <node name="teleop_ardrone_teleop" pkg="teleop_ardrone" type="teleop_ardrone_spacenav" output="screen"/>
+
+</launch>

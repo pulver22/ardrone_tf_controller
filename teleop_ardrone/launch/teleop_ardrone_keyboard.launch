@@ -1,0 +1,46 @@
+<launch>
+
+    <!-- IPv4 address of your drone -->
+    <arg name="ip" default="192.168.1.1"/>
+
+    <!-- Ultrasound frequency (7 or 8). -->
+    <arg name="freq" default="8"/>
+    <node name="ardrone_driver" pkg="ardrone_autonomy" type="ardrone_driver" output="screen" clear_params="true" args="-ip $(arg ip)">
+        <param name="outdoor" value="0"/>
+        <param name="max_bitrate" value="4000"/>
+        <param name="bitrate" value="4000"/>
+        <param name="navdata_demo" value="0"/>
+        <param name="flight_without_shell" value="0"/>
+        <param name="altitude_max" value="4000"/>
+        <param name="altitude_min" value="50"/>
+        <param name="euler_angle_max" value="0.21"/>
+        <param name="control_vz_max" value="700"/>
+        <param name="control_yaw" value="1.75"/>
+        <param name="detect_type" value="10"/>
+        <param name="enemy_colors" value="3"/>
+        <param name="detections_select_h" value="32"/>
+        <param name="detections_select_v_hsync" value="128"/>
+        <param name="enemy_without_shell" value="0"/>
+        <param name="ultrasound_freq" value="$(arg freq)"/>
+        <param name="realtime_navdata" value="true"/>
+        <param name="realtime_video" value="true"/>
+        <!-- Covariance Values (3x3 matrices reshaped to 1x9)-->
+        <rosparam param="cov/imu_la">[0.1, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.1]</rosparam>
+        <rosparam param="cov/imu_av">[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]</rosparam>
+        <rosparam param="cov/imu_or">[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 100000.0]</rosparam>
+
+        <!-- Remapping for perceiving markers -->
+        <remap from="ardrone/image_raw" to="/camera/image_raw"/>
+        <remap from="ardrone/camera_info" to="/camera/camera_info"/>
+
+    </node>
+
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find ar_pose)/launch/live_reverse.rviz"/>
+
+    <!-- Start the keyboard control -->
+    <node name="teleop_ardrone_teleop" pkg="teleop_ardrone" type="teleop_ardrone_keyboard.py" output="screen" launch-prefix="xterm -e"/>
+
+    <!-- Start the 3d Mouse for driving control -->
+    <!--<node name="teleop_3d" pkg="drone_teleop_3d" type="ardrone_3d_teleop" />          -->
+
+</launch>
