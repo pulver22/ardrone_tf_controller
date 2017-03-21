@@ -85,11 +85,11 @@ and then:
 ### 2 - Running the simulation with the ardrone and the Husky
 To launch the simulation with both the ardrone and the husky model using roslaunch:
 
-    $ roslaunch cooperative.launch
+    $ roslaunch ./cooperative.launch
 
 and then:
 
-    $ roslaunch ardrone_tf_controller coop.launch
+    $ roslaunch ./coop.launch
 
 ## Issues
 
