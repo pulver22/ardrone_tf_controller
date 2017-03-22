@@ -15,7 +15,7 @@ Position controller for landing a Parrot ARDrone using ARToolkit fiducial marker
 * Operating System
   * [Ubuntu 14.04](http://releases.ubuntu.com/trusty/) - or newer
 * Middleware
-  * [ROS](http://www.ros.org/) - depending on the installed OS (Indigo, Jase [not tested])
+  * [ROS](http://www.ros.org/) - depending on the installed OS (Indigo or Jade [not tested])
 * Other Dependencies
   * [GAZEBO](http://gazebosim.org/) - It needs GAZEBO 2 (5 can suit too but it has not been tested)
 
