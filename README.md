@@ -1,7 +1,7 @@
 # ardrone_tf_controller
 Position controller for landing a Parrot ARDrone using ARToolkit fiducial markers. The UAV model is based on the dedicated gazebo simulator written by Hongrong Huang and Juergen Sturm of the Computer Vision Group at the Technical University of Munich (http://wiki.ros.org/tum_simulator).
 
-![ArDrone inside the simulated lab map](images/ardrone_simulator.jpg)
+[![ArDrone inside the simulated lab map](images/ardrone_simulator.jpg)](https://www.youtube.com/watch?v=Ib85SRjyF3Y "ArDrone inside the simulated lab map")
 
 ## Packages Description
 
