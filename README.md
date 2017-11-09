@@ -1,7 +1,7 @@
 # ardrone_tf_controller
 Position controller for landing a Parrot ARDrone using ARToolkit fiducial markers. The UAV model is based on the dedicated gazebo simulator written by Hongrong Huang and Juergen Sturm of the Computer Vision Group at the Technical University of Munich (http://wiki.ros.org/tum_simulator).
 
-[![ArDrone inside the simulated lab map](images/ardrone_simulator.jpg)](https://www.youtube.com/watch?v=Ib85SRjyF3Y "ArDrone inside the simulated lab map")
+[![ArDrone while landing on the kingfisher](images/landing.png)](https://www.youtube.com/watch?v=J1ib9PIsr-8 "ArDrone while landing on the kingfisher")
 
 ## Packages Description
 
@@ -82,14 +82,14 @@ and then:
 
     $ roslaunch ardrone_tf_controller autopilot.launch
 
-### 2 - Running the simulation with the ardrone and the Husky
+### 2 - Running the simulation with the ardrone and the Husky/Kingfisher
 To launch the simulation with both the ardrone and the husky model using roslaunch:
 
     $ roslaunch ./cooperative.launch
 
-and then:
+while for using the Kingfisher USV:
 
-    $ roslaunch ./coop.launch
+    $ roslaunch ./uav_usv.launch
 
 ## Issues
 
