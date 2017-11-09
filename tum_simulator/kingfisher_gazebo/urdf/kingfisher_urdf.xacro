@@ -162,7 +162,7 @@ This program contains the description of the robot base model for the Clearpath 
     <visual>
       <geometry>
         <!--<box size="10 10 10" />-->
-        <mesh filename="/home/pulver/.gazebo/models/marker/meshes/artag_01.dae" scale="10 10 10"/>
+        <mesh filename="file:///home/pulver/.gazebo/models/marker/meshes/artag_01.dae" scale="10 10 10"/>
       </geometry>
     </visual>
   </link>

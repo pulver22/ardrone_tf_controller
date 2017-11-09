@@ -1,9 +1,8 @@
 <?xml version="1.0"?>
 <launch>
   <param name="use_sim_time" value="true" />
-  <node pkg="robot_localization" type="ekf_localization_node"
-     name="ekf_localization" clear_params="true">
-
+  <arg name="namespace_arg" default=""/>
+  <node pkg="robot_localization" type="ekf_localization_node" name="ekf_localization" clear_params="true">
     <param name="frequency" value="10"/>
     <param name="sensor_timeout" value="2.0"/>
     <param name="two_d_mode" value="true"/>
@@ -13,6 +12,7 @@
     <param name="world_frame" value="odom"/>
     <param name="publish_tf" value="true"/>
     <param name="imu0" value="imu/data"/>
+    <!--<param name="tf_prefix" type="string" value="usv_tf" />-->
     <rosparam param="imu0_config">[false, false, false,
                                    true,  true,  true,
                                    false,  false,  false,
@@ -30,12 +30,12 @@
     <param name="odom0_differential" value="false"/>
   </node>
  
-  <node pkg="robot_localization" type="navsat_transform_node"
-      name="navsat_transform_node" respawn="true" output="screen">
+  <node pkg="robot_localization" type="navsat_transform_node" name="navsat_transform_node" respawn="true" output="screen">
     <param name="magnetic_declination_radians" value="0"/>
     <param name="broadcast_utm_transform" value="true"/>
     <param name="wait_for_datum" value="true"/>
-    <rosparam param="datum">[36.6, -121.9, 0.0]</rosparam>
+    <!--<param name="tf_prefix" type="string" value="usv_tf" />-->
+    <rosparam param="datum">[36.6, -121.9, 0.0]</rosparam> 
 
     <!-- Inputs -->
     <remap from="imu/data" to="imu/data" />

@@ -26,6 +26,7 @@
   <node pkg="kingfisher_gazebo" type="p3d2nav.py" name="p3d2nav">
     <param name="gazebo_origin_lat" value="36.596524" type="double" />
     <param name="gazebo_origin_long" value="-121.888169" type="double" />
+    <param name="tf_prefix" type="string" value="usv_tf" />
   </node>
 
   <!-- Converts Lat/Lon from Microstrain to local X/Y -->
@@ -33,6 +34,11 @@
     <!-- Datum as latitude, longitude [decimal deg.], yaw [ENU, degrees] -->
     <rosparam param="datum">[36.595, -121.89, 0.0]</rosparam>
     <param name="base_link_frame_id" value="base_footprint" />
+    <param name="tf_prefix" type="string" value="usv_tf" />
   </node>
+
+  <include file="$(find kingfisher_control)/launch/ex_localization.launch">
+    <param name="tf_prefix" type="string" value="usv_tf" />
+  </include>
 
 </launch>

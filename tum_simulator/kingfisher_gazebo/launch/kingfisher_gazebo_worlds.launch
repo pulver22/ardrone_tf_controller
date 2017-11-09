@@ -23,7 +23,7 @@
   <arg name="usv_model" default="$(find kingfisher_gazebo)/urdf/base_gazebo.xacro"/>
 
   <param name="use_sim_time" value="true" />
-  <!-- <include file="$(find gazebo_ros)/launch/empty_world.launch">
+  <!--<include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(find kingfisher_gazebo)/worlds/$(arg world)"/>
   </include> -->
 

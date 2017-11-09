@@ -41,7 +41,8 @@
   <!-- Spawn simulated quadrotor uav -->
   <arg name="model" value="$(find cvg_sim_gazebo_plugins)/urdf/quadrotor_sensors.urdf.xacro"/>
   <param name="robot_description" command="$(find xacro)/xacro.py '$(arg model)'"/>
-  <group if="$(arg spawn_drone)" ns="quadrotor">
+
+  <group if="$(arg spawn_drone)" ns="uav1">
     <param name="tf_prefix" value="uav1_tf"/>
     <include file="$(find cvg_sim_gazebo)/launch/spawn_quadrotor.launch">
       <arg name="name" value="uav1"/>
@@ -62,16 +63,20 @@
       <arg name="P" default="0"/>
       <arg name="R" default="0"/>
       <arg name="Y" default="0"/>
+      <arg name="name" default="kingfisher"/>
+      <arg name="namespace_arg" default="usv"/>
 
       <!-- Starts gazebo with El Estero world, spawns Kingfisher, etc -->
       <include file="$(find kingfisher_gazebo)/launch/kingfisher_gazebo_worlds.launch">
         <arg name="world" value="$(arg world)"/>
+        <arg name="name" value="$(arg name)"/>
         <arg name="x" value="$(arg x)"/>
         <arg name="y" value="$(arg y)"/>
         <arg name="z" value="$(arg z)"/>
         <arg name="P" value="$(arg P)"/>
         <arg name="R" value="$(arg R)"/>
         <arg name="Y" value="$(arg Y)"/>
+        <arg name="namespace_arg" value="$(arg namespace_arg)"/>
         <!--<arg name="world" value="elestero_potentials.world"/>-->
       </include>
 
@@ -88,6 +93,11 @@
         <param name="tf_prefix" type="string" value="usv_tf"/>
         <param name="base_link_frame_id" value="base_footprint"/>
       </node>
+
+      <!-- USV localization -->
+      <!--<include file="$(find kingfisher_control)/launch/ex_localization.launch">
+        <arg name="namespace_arg" value="$(arg namespace_arg)"/>
+      </include>-->
 
   </group>
 

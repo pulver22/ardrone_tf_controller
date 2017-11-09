@@ -1,0 +1,16 @@
+<launch>
+
+    <node name="ardrone_tf_controller" pkg="ardrone_tf_controller" type="coop_usv_controller" output="screen">
+                        <param name="target_X" value="0.10" />
+                        <param name="target_Y" value="0.10" />
+                        <param name="target_Z" value="0.75" />
+			<param name="target_yaw" value="5.0" />
+			<param name="epsilon" value="0.78" />	
+			
+			<param name="pure_translation_X" value="0.8" />
+			<param name="pure_translation_Y" value="0.8" />
+    </node>
+    
+
+</launch>
+

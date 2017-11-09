@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<launch>
+  <!--Standalone launch file to visualize the URDF Model of a Clearpath Husky A200-->
+  <arg name="gui" default="True" />
+  <include file="$(find kingfisher_description)/launch/description.launch" />
+  <param name="use_gui" value="$(arg gui)"/>
+  <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find kingfisher_viz)/rviz/model.rviz" />
+</launch>
